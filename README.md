@@ -5,6 +5,30 @@ An easy way to deliver the Frappe Framework to common IaaS, PaaS, and local syst
 
 xspress is a set of tooling to deliver, setup, and maintain infrastructure and configuration for hosting [Frappe Framework](https://frappeframework.com/) based applications (like [ERPNext](https://erpnext.com/)).
 
+The current minimum system requirements/packages can be found here on [Frappe's docs](https://github.com/frappe/bench/blob/develop/docs/installation.md#manual-install).
+
+## Manual Install (referenced from Frappe's docs)
+To manually install frappe/erpnext, you can follow this this wiki for Linux and this wiki for MacOS. It gives an excellent explanation about the stack. You can also follow the steps mentioned below:
+
+1. Install Prerequisites
+    * Python 3.6+
+    * Node.js 12
+    * Redis 5					(caching and realtime updates)
+    * MariaDB 10.3 / Postgres 9.5			(to run database driven apps)
+    * yarn 1.12+					(js dependency manager)
+    * pip 15+					(py dependency manager)
+    * cron 						(scheduled jobs)
+    * wkhtmltopdf (version 0.12.5 with patched qt) 	(for pdf generation)
+• Nginx 					(for production)
+
+2. Install Bench
+
+Install the latest bench using pip:
+
+```
+pip3 install frappe-bench
+```
+
 ## IaaS
 
 ### AWS
