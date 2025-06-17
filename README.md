@@ -7,6 +7,50 @@ xpress is a set of tooling to deliver, setup, and maintain infrastructure and co
 
 The current minimum system requirements/packages can be found here on [Frappe's docs](https://github.com/frappe/bench/blob/develop/docs/installation.md#manual-install).
 
+## Repository Structure
+
+```
+xpress/
+├── docs/                       # Documentation and requirements
+│   └── aws/                    # AWS-specific documentation
+├── iac/                        # Infrastructure as Code
+│   ├── aws/                    # Amazon Web Services
+│   │   ├── ec2/                # EC2 single-instance deployment
+│   │   ├── ecs/                # ECS containerized deployment (planned)
+│   │   └── eks/                # EKS Kubernetes deployment (planned)
+│   ├── azure/                  # Microsoft Azure (planned)
+│   └── gcp/                    # Google Cloud Platform (planned)
+└── README.md                   # This file
+```
+
+## Infrastructure Deployments
+
+### ✅ AWS EC2 - Staging Environment (Available)
+A cost-effective, single-instance deployment perfect for development and small-scale production.
+
+**Quick Start**:
+```bash
+cd iac/aws/ec2/terraform/
+./deploy-backend.sh
+```
+
+**Features**:
+- Single EC2 instance with Docker Compose
+- Automated SSL certificates with Let's Encrypt
+- S3 backups with lifecycle policies
+- Systems Manager access (no SSH required)
+- Cost: < $5/month
+
+**Documentation**: [AWS EC2 Guide](iac/aws/ec2/terraform/README.md)
+
+### 🔄 Additional Deployments (Planned)
+- **AWS ECS**: Production-ready containers with managed services
+- **AWS EKS**: Enterprise Kubernetes with advanced features
+- **Azure VM**: Alternative single-instance deployment
+- **GCP Compute**: Google Cloud single-instance deployment
+
+[View all deployment options](iac/README.md)
+
 ## Setup Development Environment
 
 You can follow the detailed guide here [Frappe Docker - Development](https://github.com/frappe/frappe_docker/blob/main/docs/development.md), but the following is a concise version to get up and running with a local development environment using Docker, VS Code, and Dev Containers:

@@ -1,0 +1,18 @@
+# Backend configuration template
+# This file should be used AFTER the initial deployment to migrate state to remote backend
+# 
+# To use this backend configuration:
+# 1. First run `terraform init` and `terraform apply` without this backend block
+# 2. Note the output values for bucket name and DynamoDB table name
+# 3. Update the values below with the actual resource names
+# 4. Run `terraform init -migrate-state` to move the state to the remote backend
+
+terraform {
+  backend "s3" {
+    bucket         = "REPLACE_WITH_ACTUAL_BUCKET_NAME"
+    key            = "terraform.tfstate"
+    region         = "us-east-1"  # Update this to match your region
+    dynamodb_table = "REPLACE_WITH_ACTUAL_TABLE_NAME"
+    encrypt        = true
+  }
+}
