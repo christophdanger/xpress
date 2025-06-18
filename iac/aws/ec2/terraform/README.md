@@ -91,61 +91,51 @@ Before deploying this infrastructure, ensure you have:
 
 ## Deployment Steps
 
-### Step 1: Initial Deployment
+## Deployment Steps
 
-1. **Clone and navigate to the terraform directory**:
-   ```bash
-   cd /workspaces/xpress/iac/aws/ec2/terraform
-   ```
+### Prerequisites
+- AWS CLI configured with appropriate credentials
+- Terraform >= 1.0 installed
 
-2. **Run the deployment script**:
-   ```bash
-   ./deploy-backend.sh
-   ```
+### Step 1: Bootstrap (Backend Infrastructure)
 
-   This script will:
-   - Validate AWS credentials
-   - Initialize Terraform
-   - Plan and apply the infrastructure
-   - Generate the backend configuration file
+Create the S3 bucket and DynamoDB table for Terraform state:
 
-### Step 2: Migrate to Remote State
+```bash
+cd bootstrap/
+./deploy-bootstrap.sh
+cd ..
+```
 
-After the initial deployment completes:
+### Step 2: Main Infrastructure
 
-1. **Migrate the Terraform state to the remote backend**:
-   ```bash
-   terraform init -migrate-state
-   ```
+Deploy the application infrastructure with remote backend:
 
-2. **Verify the migration**:
-   ```bash
-   terraform plan
-   ```
-   This should show "No changes" if the migration was successful.
+```bash
+./deploy-main.sh
+```
 
-3. **Clean up local state** (optional, but recommended):
-   ```bash
-   rm terraform.tfstate*
-   ```
+**Important**: The bootstrap step creates the backend infrastructure separately to avoid the circular dependency problem of creating and using an S3 bucket as a backend in the same configuration.
 
-4. **Commit the backend configuration**:
-   ```bash
-   git add backend-config.tf
-   git commit -m "Add Terraform remote backend configuration"
-   ```
+See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for detailed explanation and troubleshooting.
 
 ## File Structure
 
 ```
 iac/aws/ec2/terraform/
-├── main.tf                     # Provider and Terraform configuration
+├── bootstrap/                  # Backend infrastructure (S3 + DynamoDB)
+│   ├── main.tf                 # Provider configuration
+│   ├── variables.tf            # Bootstrap variables
+│   ├── backend.tf              # S3 and DynamoDB resources
+│   ├── outputs.tf              # Backend configuration generation
+│   └── deploy-bootstrap.sh     # Bootstrap deployment script
+├── main.tf                     # Main provider configuration
 ├── variables.tf                # Input variables
-├── backend.tf                  # S3 and DynamoDB resources
+├── backend.tf                  # Application resources (S3 backups)
 ├── outputs.tf                  # Output values
-├── backend-config.tf.template  # Template for backend configuration
-├── deploy-backend.sh           # Deployment script
-├── backend-config.tf           # Generated backend config (after deployment)
+├── backend-config.tf           # Generated backend config (after bootstrap)
+├── deploy-main.sh              # Main deployment script
+├── DEPLOYMENT_GUIDE.md         # Step-by-step deployment guide
 └── README.md                   # This file
 ```
 

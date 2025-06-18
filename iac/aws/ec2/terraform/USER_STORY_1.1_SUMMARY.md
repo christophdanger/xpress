@@ -2,15 +2,23 @@
 
 ## ✅ **User Story 1.1: Secure Terraform State Backend - COMPLETED**
 
+### **Problem Solved: Bootstrap Circular Dependency**
+
+**Issue**: Cannot create S3 bucket for Terraform state within the same configuration that uses it as backend.
+
+**Solution**: Two-step bootstrap process:
+1. **Bootstrap**: Create backend infrastructure with local state
+2. **Main**: Use remote backend for application infrastructure
+
 ### **Acceptance Criteria Met:**
 
 1. ✅ **S3 bucket created for terraform.tfstate file**
    - Bucket name: `${project_name}-terraform-state-${random_suffix}`
-   - Implemented in: `terraform/backend.tf`
+   - Implemented in: `bootstrap/backend.tf`
 
 2. ✅ **S3 bucket has versioning and server-side encryption enabled**
    - Versioning: Enabled via `aws_s3_bucket_versioning` resource
-   - Encryption: AES256 server-side encryption via `aws_s3_bucket_server_side_encryption_configuration`
+   - Encryption: AES256 server-side encryption
    - Public access: Blocked via `aws_s3_bucket_public_access_block`
 
 3. ✅ **DynamoDB table created for state locking**
@@ -34,33 +42,40 @@
 
 ```
 iac/aws/ec2/terraform/
-├── main.tf                     # Provider configuration
+├── bootstrap/                  # Backend infrastructure (Step 1)
+│   ├── main.tf                 # Provider configuration
+│   ├── variables.tf            # Bootstrap variables  
+│   ├── backend.tf              # S3 and DynamoDB resources
+│   ├── outputs.tf              # Backend config generation
+│   └── deploy-bootstrap.sh     # Bootstrap deployment script
+├── main.tf                     # Main provider configuration
 ├── variables.tf                # Input variables  
-├── backend.tf                  # S3 and DynamoDB resources
+├── backend.tf                  # Application resources (S3 backups)
 ├── outputs.tf                  # Output values
-├── backend-config.tf.template  # Backend configuration template
-├── deploy-backend.sh           # Automated deployment script
-├── validate.sh                 # Configuration validation script
+├── backend-config.tf           # Generated backend config (after bootstrap)
+├── deploy-main.sh              # Main deployment script
+├── DEPLOYMENT_GUIDE.md         # Step-by-step guide
 ├── .gitignore                  # Git ignore patterns for Terraform
 └── README.md                   # Comprehensive documentation
 ```
 
 ### **Deployment Process:**
 
-1. **Initial deployment** (local state):
+1. **Bootstrap deployment** (creates backend infrastructure):
    ```bash
-   cd iac/aws/ec2/terraform/
-   ./deploy-backend.sh
+   cd iac/aws/ec2/terraform/bootstrap/
+   ./deploy-bootstrap.sh
    ```
 
-2. **State migration** (to remote backend):
+2. **Main deployment** (uses remote backend):
    ```bash
-   terraform init -migrate-state
+   cd ../
+   ./deploy-main.sh
    ```
 
 3. **Verification**:
    ```bash
-   terraform plan  # Should show "No changes"
+   terraform state list  # Shows resources in remote backend
    ```
 
 ### **Security Features:**
