@@ -16,9 +16,3 @@ variable "environment" {
   type        = string
   default     = "staging"
 }
-
-variable "enable_public_access_block" {
-  description = "Whether to enable S3 public access block (may not be available in all AWS accounts)"
-  type        = bool
-  default     = false
-}

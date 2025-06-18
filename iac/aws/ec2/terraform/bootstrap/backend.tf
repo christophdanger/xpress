@@ -33,9 +33,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "terraform_state_e
   }
 }
 
-# Block public access to the S3 bucket (optional - may not be available in all AWS accounts)
+# Block public access to the S3 bucket
 resource "aws_s3_bucket_public_access_block" "terraform_state_pab" {
-  count  = var.enable_public_access_block ? 1 : 0
   bucket = aws_s3_bucket.terraform_state.id
 
   block_public_acls       = true
