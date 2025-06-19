@@ -1,0 +1,517 @@
+name: Infrastructure Monitoring & Maintenance
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      check_type:
+        description: 'Type of check to perform'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+        - 'full'
+        - 'health-only'
+        - 'ssl-only'
+        - 'backup-only'
+        - 'security-only'
+
+env:
+  AWS_REGION: us-east-1
+  TERRAFORM_DIR: iac/aws/ec2/terraform
+
+jobs:
+  monitor:
+    name: Monitor ERPNext Infrastructure
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+        
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.5.0
+        terraform_wrapper: false
+        
+    - name: Get infrastructure information
+      id: get-info
+      working-directory: ${{ env.TERRAFORM_DIR }}
+      run: |
+        terraform init -backend-config=backend-config.tf
+        INSTANCE_ID=$(terraform output -raw instance_id)
+        PUBLIC_IP=$(terraform output -raw elastic_ip_address)
+        BACKUP_BUCKET=$(terraform output -raw backup_bucket_name)
+        echo "instance_id=$INSTANCE_ID" >> $GITHUB_OUTPUT
+        echo "public_ip=$PUBLIC_IP" >> $GITHUB_OUTPUT
+        echo "backup_bucket=$BACKUP_BUCKET" >> $GITHUB_OUTPUT
+        
+    - name: Prepare monitoring script
+      run: |
+        cat > monitor-infrastructure.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        
+        CHECK_TYPE="${{ github.event.inputs.check_type || 'full' }}"
+        PUBLIC_IP="${{ steps.get-info.outputs.public_ip }}"
+        BACKUP_BUCKET="${{ steps.get-info.outputs.backup_bucket }}"
+        
+        echo "=== Infrastructure Monitoring Started ==="
+        echo "Check Type: $CHECK_TYPE"
+        echo "Timestamp: $(date)"
+        echo "Public IP: $PUBLIC_IP"
+        
+        # Initialize status tracking
+        HEALTH_STATUS="UNKNOWN"
+        SSL_STATUS="UNKNOWN"
+        BACKUP_STATUS="UNKNOWN"
+        SECURITY_STATUS="UNKNOWN"
+        OVERALL_STATUS="UNKNOWN"
+        
+        # Function to check system health
+        check_system_health() {
+          echo "=== System Health Check ==="
+          
+          # Check system resources
+          echo "System Resources:"
+          echo "- CPU Usage: $(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | sed 's/%us,//')%"
+          echo "- Memory Usage: $(free | grep Mem | awk '{printf "%.1f%%", $3/$2 * 100.0}')"
+          echo "- Disk Usage: $(df -h / | awk 'NR==2{print $5}')"
+          
+          # Check system load
+          LOAD_AVG=$(uptime | awk -F'load average:' '{print $2}' | awk '{print $1}' | sed 's/,//')
+          echo "- Load Average (1min): $LOAD_AVG"
+          
+          # Check available memory
+          AVAILABLE_MB=$(free -m | awk 'NR==2{print $7}')
+          echo "- Available Memory: ${AVAILABLE_MB}MB"
+          
+          # Check if critical services are running
+          echo ""
+          echo "Docker Service Status:"
+          systemctl is-active docker && echo "✅ Docker: Running" || echo "❌ Docker: Not running"
+          
+          # Check ERPNext containers
+          if [ -f "/opt/erpnext/frappe_docker/docker-compose.yml" ] || [ -f "~/gitops/docker-compose.yml" ]; then
+            echo ""
+            echo "ERPNext Container Status:"
+            cd /opt/erpnext/frappe_docker 2>/dev/null || cd /
+            
+            if docker compose --project-name erpnext -f ~/gitops/docker-compose.yml ps 2>/dev/null; then
+              RUNNING_CONTAINERS=$(docker compose --project-name erpnext -f ~/gitops/docker-compose.yml ps --services --filter status=running | wc -l)
+              TOTAL_CONTAINERS=$(docker compose --project-name erpnext -f ~/gitops/docker-compose.yml ps --services | wc -l)
+              echo "Running containers: $RUNNING_CONTAINERS/$TOTAL_CONTAINERS"
+              
+              if [ $RUNNING_CONTAINERS -eq $TOTAL_CONTAINERS ] && [ $RUNNING_CONTAINERS -gt 0 ]; then
+                HEALTH_STATUS="HEALTHY"
+                echo "✅ All ERPNext containers are running"
+              else
+                HEALTH_STATUS="DEGRADED"
+                echo "⚠️  Some ERPNext containers are not running"
+              fi
+            else
+              HEALTH_STATUS="DOWN"
+              echo "❌ ERPNext containers not found or not running"
+            fi
+          else
+            HEALTH_STATUS="NOT_DEPLOYED"
+            echo "❌ ERPNext not deployed"
+          fi
+          
+          # Check system logs for errors
+          echo ""
+          echo "Recent System Errors:"
+          ERROR_COUNT=$(journalctl --since "1 hour ago" -p err --no-pager | wc -l)
+          echo "- System errors in last hour: $ERROR_COUNT"
+          
+          if [ $ERROR_COUNT -gt 10 ]; then
+            echo "⚠️  High number of system errors detected"
+            journalctl --since "1 hour ago" -p err --no-pager | tail -5
+          fi
+        }
+        
+        # Function to check SSL certificates
+        check_ssl_status() {
+          echo "=== SSL Certificate Check ==="
+          
+          # Try to find site name from environment
+          SITE_NAME=""
+          if [ -f "~/gitops/erpnext.env" ]; then
+            SITE_NAME=$(grep "SITES=" ~/gitops/erpnext.env | cut -d= -f2 | tr ',' ' ' | awk '{print $1}')
+          fi
+          
+          if [ -z "$SITE_NAME" ]; then
+            # Try to get from running containers
+            if docker compose --project-name erpnext -f ~/gitops/docker-compose.yml ps >/dev/null 2>&1; then
+              SITE_NAME=$(docker compose --project-name erpnext -f ~/gitops/docker-compose.yml exec -T backend ls sites/ 2>/dev/null | grep -v apps.txt | grep -v assets | grep -v common_site_config.json | head -1 | tr -d '\r\n')
+            fi
+          fi
+          
+          if [ ! -z "$SITE_NAME" ]; then
+            echo "Checking SSL for site: $SITE_NAME"
+            
+            # Check if site responds to HTTPS
+            if curl -f -s -k --connect-timeout 10 "https://$SITE_NAME/api/method/ping" > /dev/null; then
+              echo "✅ HTTPS connectivity: OK"
+              
+              # Check certificate details
+              if command -v openssl >/dev/null; then
+                CERT_INFO=$(echo | openssl s_client -servername $SITE_NAME -connect $SITE_NAME:443 2>/dev/null | openssl x509 -noout -dates 2>/dev/null)
+                
+                if [ ! -z "$CERT_INFO" ]; then
+                  EXPIRY_DATE=$(echo "$CERT_INFO" | grep notAfter | cut -d= -f2)
+                  EXPIRY_EPOCH=$(date -d "$EXPIRY_DATE" +%s 2>/dev/null || echo 0)
+                  CURRENT_EPOCH=$(date +%s)
+                  DAYS_UNTIL_EXPIRY=$(( (EXPIRY_EPOCH - CURRENT_EPOCH) / 86400 ))
+                  
+                  echo "- Certificate expires in: $DAYS_UNTIL_EXPIRY days"
+                  
+                  if [ $DAYS_UNTIL_EXPIRY -gt 30 ]; then
+                    SSL_STATUS="HEALTHY"
+                    echo "✅ SSL certificate is valid"
+                  elif [ $DAYS_UNTIL_EXPIRY -gt 7 ]; then
+                    SSL_STATUS="WARNING"
+                    echo "⚠️  SSL certificate expires soon ($DAYS_UNTIL_EXPIRY days)"
+                  else
+                    SSL_STATUS="CRITICAL"
+                    echo "❌ SSL certificate expires very soon ($DAYS_UNTIL_EXPIRY days)"
+                  fi
+                else
+                  SSL_STATUS="ERROR"
+                  echo "❌ Could not retrieve certificate information"
+                fi
+              fi
+            else
+              SSL_STATUS="DOWN"
+              echo "❌ HTTPS connectivity: FAILED"
+              echo "Site may be down or SSL not properly configured"
+            fi
+          else
+            SSL_STATUS="NOT_CONFIGURED"
+            echo "⚠️  Could not determine site name for SSL check"
+          fi
+        }
+        
+        # Function to check backup status
+        check_backup_status() {
+          echo "=== Backup Status Check ==="
+          
+          # Check if backup bucket exists and is accessible
+          if aws s3 ls "s3://$BACKUP_BUCKET/" > /dev/null 2>&1; then
+            echo "✅ Backup bucket accessible: $BACKUP_BUCKET"
+            
+            # Check for recent backups
+            RECENT_BACKUPS=$(aws s3 ls "s3://$BACKUP_BUCKET/backups/" | grep -E "[0-9]{8}_[0-9]{6}" | wc -l)
+            echo "- Total backups found: $RECENT_BACKUPS"
+            
+            if [ $RECENT_BACKUPS -gt 0 ]; then
+              # Get the most recent backup
+              LATEST_BACKUP=$(aws s3 ls "s3://$BACKUP_BUCKET/backups/" | sort | tail -n 1 | awk '{print $1" "$2" "$4}')
+              LATEST_DATE=$(echo "$LATEST_BACKUP" | awk '{print $1}')
+              LATEST_FILE=$(echo "$LATEST_BACKUP" | awk '{print $3}')
+              
+              echo "- Latest backup: $LATEST_FILE ($LATEST_DATE)"
+              
+              # Check backup age
+              if [ ! -z "$LATEST_DATE" ]; then
+                BACKUP_EPOCH=$(date -d "$LATEST_DATE" +%s 2>/dev/null || echo 0)
+                CURRENT_EPOCH=$(date +%s)
+                HOURS_OLD=$(( (CURRENT_EPOCH - BACKUP_EPOCH) / 3600 ))
+                
+                echo "- Latest backup age: $HOURS_OLD hours"
+                
+                if [ $HOURS_OLD -lt 26 ]; then
+                  BACKUP_STATUS="HEALTHY"
+                  echo "✅ Recent backup found (less than 26 hours old)"
+                elif [ $HOURS_OLD -lt 48 ]; then
+                  BACKUP_STATUS="WARNING"
+                  echo "⚠️  Latest backup is getting old ($HOURS_OLD hours)"
+                else
+                  BACKUP_STATUS="CRITICAL"
+                  echo "❌ Latest backup is too old ($HOURS_OLD hours)"
+                fi
+              fi
+            else
+              BACKUP_STATUS="NO_BACKUPS"
+              echo "❌ No backups found in S3 bucket"
+            fi
+          else
+            BACKUP_STATUS="BUCKET_ERROR"
+            echo "❌ Cannot access backup bucket: $BACKUP_BUCKET"
+          fi
+          
+          # Check local backup configuration
+          if [ -f "/opt/erpnext/backup-to-s3.sh" ]; then
+            echo "✅ Backup script exists"
+          else
+            echo "⚠️  Backup script not found"
+          fi
+          
+          # Check cron job
+          if crontab -l | grep -q backup; then
+            echo "✅ Backup cron job configured"
+          else
+            echo "⚠️  Backup cron job not found"
+          fi
+        }
+        
+        # Function to check security status
+        check_security_status() {
+          echo "=== Security Status Check ==="
+          
+          # Check for system updates
+          if command -v yum >/dev/null; then
+            UPDATE_COUNT=$(yum check-update --quiet | wc -l 2>/dev/null || echo "0")
+            echo "- Available system updates: $UPDATE_COUNT"
+            
+            if [ $UPDATE_COUNT -gt 50 ]; then
+              echo "⚠️  Many system updates available"
+            fi
+          fi
+          
+          # Check SSH configuration
+          if [ -f "/etc/ssh/sshd_config" ]; then
+            if grep -q "PasswordAuthentication no" /etc/ssh/sshd_config; then
+              echo "✅ SSH password authentication disabled"
+            else
+              echo "⚠️  SSH password authentication may be enabled"
+            fi
+          fi
+          
+          # Check firewall status
+          if command -v firewall-cmd >/dev/null; then
+            if systemctl is-active firewalld >/dev/null; then
+              echo "✅ Firewall is active"
+              
+              # Check if only necessary ports are open
+              OPEN_PORTS=$(firewall-cmd --list-ports 2>/dev/null || echo "")
+              echo "- Open ports: $OPEN_PORTS"
+            else
+              echo "⚠️  Firewall is not active"
+            fi
+          fi
+          
+          # Check for suspicious processes
+          SUSPICIOUS_PROCESSES=$(ps aux | grep -E "(bitcoin|monero|xmrig|mining)" | grep -v grep | wc -l)
+          if [ $SUSPICIOUS_PROCESSES -gt 0 ]; then
+            echo "⚠️  Suspicious processes detected"
+            SECURITY_STATUS="WARNING"
+          else
+            echo "✅ No suspicious processes detected"
+            SECURITY_STATUS="HEALTHY"
+          fi
+          
+          # Check disk space
+          DISK_USAGE=$(df / | awk 'NR==2 {print $5}' | sed 's/%//')
+          echo "- Root disk usage: ${DISK_USAGE}%"
+          
+          if [ $DISK_USAGE -gt 90 ]; then
+            echo "❌ Critical disk space"
+            SECURITY_STATUS="CRITICAL"
+          elif [ $DISK_USAGE -gt 80 ]; then
+            echo "⚠️  High disk usage"
+            [ "$SECURITY_STATUS" != "CRITICAL" ] && SECURITY_STATUS="WARNING"
+          fi
+        }
+        
+        # Execute checks based on type
+        if [ "$CHECK_TYPE" = "full" ] || [ "$CHECK_TYPE" = "health-only" ]; then
+          check_system_health
+        fi
+        
+        if [ "$CHECK_TYPE" = "full" ] || [ "$CHECK_TYPE" = "ssl-only" ]; then
+          check_ssl_status
+        fi
+        
+        if [ "$CHECK_TYPE" = "full" ] || [ "$CHECK_TYPE" = "backup-only" ]; then
+          check_backup_status
+        fi
+        
+        if [ "$CHECK_TYPE" = "full" ] || [ "$CHECK_TYPE" = "security-only" ]; then
+          check_security_status
+        fi
+        
+        # Determine overall status
+        if [ "$CHECK_TYPE" = "full" ]; then
+          if [[ "$HEALTH_STATUS" == "HEALTHY" && "$SSL_STATUS" == "HEALTHY" && "$BACKUP_STATUS" == "HEALTHY" && "$SECURITY_STATUS" == "HEALTHY" ]]; then
+            OVERALL_STATUS="HEALTHY"
+          elif [[ "$HEALTH_STATUS" == "DOWN" || "$SSL_STATUS" == "DOWN" || "$BACKUP_STATUS" == "CRITICAL" || "$SECURITY_STATUS" == "CRITICAL" ]]; then
+            OVERALL_STATUS="CRITICAL"
+          else
+            OVERALL_STATUS="WARNING"
+          fi
+        else
+          # For specific checks, use the status of the checked component
+          case "$CHECK_TYPE" in
+            "health-only") OVERALL_STATUS="$HEALTH_STATUS" ;;
+            "ssl-only") OVERALL_STATUS="$SSL_STATUS" ;;
+            "backup-only") OVERALL_STATUS="$BACKUP_STATUS" ;;
+            "security-only") OVERALL_STATUS="$SECURITY_STATUS" ;;
+          esac
+        fi
+        
+        echo ""
+        echo "=== Monitoring Summary ==="
+        echo "Overall Status: $OVERALL_STATUS"
+        echo "Health Status: $HEALTH_STATUS"
+        echo "SSL Status: $SSL_STATUS"
+        echo "Backup Status: $BACKUP_STATUS"
+        echo "Security Status: $SECURITY_STATUS"
+        echo "Check completed at: $(date)"
+        
+        # Store results for GitHub Actions
+        echo "OVERALL_STATUS=$OVERALL_STATUS" >> /tmp/monitoring_results.env
+        echo "HEALTH_STATUS=$HEALTH_STATUS" >> /tmp/monitoring_results.env
+        echo "SSL_STATUS=$SSL_STATUS" >> /tmp/monitoring_results.env
+        echo "BACKUP_STATUS=$BACKUP_STATUS" >> /tmp/monitoring_results.env
+        echo "SECURITY_STATUS=$SECURITY_STATUS" >> /tmp/monitoring_results.env
+        
+        # Exit with appropriate code
+        case "$OVERALL_STATUS" in
+          "HEALTHY") exit 0 ;;
+          "WARNING") exit 0 ;;  # Don't fail the workflow for warnings
+          "CRITICAL"|"DOWN"|"ERROR") exit 1 ;;
+          *) exit 1 ;;
+        esac
+        EOF
+        
+        chmod +x monitor-infrastructure.sh
+        
+    - name: Execute monitoring via SSM
+      continue-on-error: true
+      run: |
+        COMMAND_ID=$(aws ssm send-command \
+          --instance-ids ${{ steps.get-info.outputs.instance_id }} \
+          --document-name "AWS-RunShellScript" \
+          --parameters commands="$(cat monitor-infrastructure.sh | base64 -w 0 | base64 -d)" \
+          --query 'Command.CommandId' \
+          --output text)
+          
+        echo "Command ID: $COMMAND_ID"
+        echo "command_id=$COMMAND_ID" >> $GITHUB_ENV
+        
+        # Wait for command to complete
+        echo "Waiting for monitoring to complete..."
+        aws ssm wait command-executed \
+          --command-id $COMMAND_ID \
+          --instance-id ${{ steps.get-info.outputs.instance_id }}
+          
+    - name: Get monitoring results
+      id: monitoring-results
+      run: |
+        echo "=== Monitoring Results ==="
+        OUTPUT=$(aws ssm get-command-invocation \
+          --command-id ${{ env.command_id }} \
+          --instance-id ${{ steps.get-info.outputs.instance_id }} \
+          --query 'StandardOutputContent' \
+          --output text)
+        
+        echo "$OUTPUT"
+        
+        echo "=== Error Output (if any) ==="
+        aws ssm get-command-invocation \
+          --command-id ${{ env.command_id }} \
+          --instance-id ${{ steps.get-info.outputs.instance_id }} \
+          --query 'StandardErrorContent' \
+          --output text
+          
+        # Extract status information
+        OVERALL_STATUS=$(echo "$OUTPUT" | grep "Overall Status:" | awk '{print $3}' || echo "UNKNOWN")
+        HEALTH_STATUS=$(echo "$OUTPUT" | grep "Health Status:" | awk '{print $3}' || echo "UNKNOWN")
+        SSL_STATUS=$(echo "$OUTPUT" | grep "SSL Status:" | awk '{print $3}' || echo "UNKNOWN")
+        BACKUP_STATUS=$(echo "$OUTPUT" | grep "Backup Status:" | awk '{print $3}' || echo "UNKNOWN")
+        SECURITY_STATUS=$(echo "$OUTPUT" | grep "Security Status:" | awk '{print $3}' || echo "UNKNOWN")
+        
+        echo "overall_status=$OVERALL_STATUS" >> $GITHUB_OUTPUT
+        echo "health_status=$HEALTH_STATUS" >> $GITHUB_OUTPUT
+        echo "ssl_status=$SSL_STATUS" >> $GITHUB_OUTPUT
+        echo "backup_status=$BACKUP_STATUS" >> $GITHUB_OUTPUT
+        echo "security_status=$SECURITY_STATUS" >> $GITHUB_OUTPUT
+        
+    - name: Create monitoring summary
+      if: always()
+      run: |
+        OVERALL_STATUS="${{ steps.monitoring-results.outputs.overall_status }}"
+        HEALTH_STATUS="${{ steps.monitoring-results.outputs.health_status }}"
+        SSL_STATUS="${{ steps.monitoring-results.outputs.ssl_status }}"
+        BACKUP_STATUS="${{ steps.monitoring-results.outputs.backup_status }}"
+        SECURITY_STATUS="${{ steps.monitoring-results.outputs.security_status }}"
+        
+        # Determine status emoji
+        get_status_emoji() {
+          case "$1" in
+            "HEALTHY") echo "✅" ;;
+            "WARNING") echo "⚠️" ;;
+            "CRITICAL"|"DOWN"|"ERROR") echo "❌" ;;
+            *) echo "❓" ;;
+          esac
+        }
+        
+        cat >> $GITHUB_STEP_SUMMARY << EOF
+        # 📊 Infrastructure Monitoring Report
+        
+        ## Overall Status: $(get_status_emoji "$OVERALL_STATUS") $OVERALL_STATUS
+        
+        ## Component Status
+        | Component | Status | Indicator |
+        |-----------|--------|-----------|
+        | System Health | $HEALTH_STATUS | $(get_status_emoji "$HEALTH_STATUS") |
+        | SSL/TLS | $SSL_STATUS | $(get_status_emoji "$SSL_STATUS") |
+        | Backups | $BACKUP_STATUS | $(get_status_emoji "$BACKUP_STATUS") |
+        | Security | $SECURITY_STATUS | $(get_status_emoji "$SECURITY_STATUS") |
+        
+        ## Monitoring Details
+        - **Check Type**: ${{ github.event.inputs.check_type || 'full' }}
+        - **Instance ID**: ${{ steps.get-info.outputs.instance_id }}
+        - **Public IP**: ${{ steps.get-info.outputs.public_ip }}
+        - **Executed At**: $(date -u)
+        - **Next Scheduled Check**: Every 6 hours
+        
+        ## Status Definitions
+        - **HEALTHY**: All systems operating normally
+        - **WARNING**: Minor issues detected, monitoring required
+        - **CRITICAL**: Immediate attention required
+        - **DOWN**: Service unavailable
+        
+        ## Actions Required
+        $(if [ "$OVERALL_STATUS" = "CRITICAL" ] || [ "$OVERALL_STATUS" = "DOWN" ]; then
+          echo "🚨 **IMMEDIATE ACTION REQUIRED** - Critical issues detected"
+        elif [ "$OVERALL_STATUS" = "WARNING" ]; then
+          echo "⚠️ **MONITORING RECOMMENDED** - Some issues detected"
+        else
+          echo "✅ **NO ACTION REQUIRED** - All systems healthy"
+        fi)
+        
+        ## Troubleshooting
+        If issues are detected:
+        1. Check the detailed output above for specific problems
+        2. Connect to the instance via AWS SSM Session Manager
+        3. Review application logs: docker compose logs
+        4. Check system resources: htop, df -h, free -h
+        5. Restart services if necessary: docker compose restart
+        EOF
+        
+    - name: Handle critical status
+      if: steps.monitoring-results.outputs.overall_status == 'CRITICAL' || steps.monitoring-results.outputs.overall_status == 'DOWN'
+      run: |
+        echo "🚨 CRITICAL STATUS DETECTED 🚨"
+        echo "Infrastructure requires immediate attention!"
+        echo "Overall Status: ${{ steps.monitoring-results.outputs.overall_status }}"
+        
+        # Here you could add alerting logic:
+        # - Send email notifications
+        # - Post to Slack
+        # - Create GitHub issue
+        # - Page on-call engineer
+        
+        # For now, we'll just fail the workflow to trigger notifications
+        exit 1

@@ -35,19 +35,40 @@ usermod -aG docker ec2-user
 curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
 chmod +x /usr/local/bin/docker-compose
 
+# Install AWS CLI v2 (for backup operations)
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+./aws/install
+rm -rf aws awscliv2.zip
+
+# Install jq for JSON processing
+yum install -y jq
+
 # Create directory structure for ERPNext
 mkdir -p /opt/erpnext
 chown ec2-user:ec2-user /opt/erpnext
 
+# Create gitops directory for configuration management
+mkdir -p /home/ec2-user/gitops
+chown ec2-user:ec2-user /home/ec2-user/gitops
+
 # Set hostname
 hostnamectl set-hostname ${project_name}-${environment}
 
-echo "$(date): User data script execution completed"
-echo "Instance ready for ERPNext deployment"
+# Create initial environment template
+cat > /opt/erpnext/.env << 'EOF'
+# ERPNext Environment Configuration
+# This file will be updated by deployment workflows
+PROJECT_NAME=${project_name}
+ENVIRONMENT=${environment}
+EOF
 
 # Set permissions
 chown ec2-user:ec2-user /opt/erpnext/.env
 chmod 600 /opt/erpnext/.env
+
+echo "$(date): User data script execution completed"
+echo "Instance ready for ERPNext deployment"
 
 # Create backup script
 cat > /opt/erpnext/backup.sh << 'EOF'

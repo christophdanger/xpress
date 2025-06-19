@@ -1,0 +1,354 @@
+name: Epic 2.2 - SSL/TLS Configuration
+on:
+  workflow_dispatch:
+    inputs:
+      site_name:
+        description: 'Site name to configure SSL for'
+        required: true
+        type: string
+      email:
+        description: 'Email for Let''s Encrypt notifications'
+        required: true
+        type: string
+      force_renewal:
+        description: 'Force SSL certificate renewal'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  AWS_REGION: us-east-1
+  TERRAFORM_DIR: iac/aws/ec2/terraform
+
+jobs:
+  configure-ssl:
+    name: Configure SSL/TLS with Let's Encrypt
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+        
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.5.0
+        terraform_wrapper: false
+        
+    - name: Get EC2 instance information
+      id: get-instance
+      working-directory: ${{ env.TERRAFORM_DIR }}
+      run: |
+        terraform init -backend-config=backend-config.tf
+        INSTANCE_ID=$(terraform output -raw instance_id)
+        PUBLIC_IP=$(terraform output -raw elastic_ip_address)
+        echo "instance_id=$INSTANCE_ID" >> $GITHUB_OUTPUT
+        echo "public_ip=$PUBLIC_IP" >> $GITHUB_OUTPUT
+        echo "Instance ID: $INSTANCE_ID"
+        echo "Public IP: $PUBLIC_IP"
+        
+    - name: Validate DNS configuration
+      run: |
+        SITE_NAME="${{ github.event.inputs.site_name }}"
+        PUBLIC_IP="${{ steps.get-instance.outputs.public_ip }}"
+        
+        echo "Validating DNS configuration for $SITE_NAME"
+        echo "Expected IP: $PUBLIC_IP"
+        
+        # Check if DNS points to our instance
+        RESOLVED_IP=$(dig +short $SITE_NAME | tail -n1)
+        echo "Resolved IP: $RESOLVED_IP"
+        
+        if [ "$RESOLVED_IP" != "$PUBLIC_IP" ]; then
+          echo "⚠️  WARNING: DNS does not point to the correct IP address"
+          echo "Expected: $PUBLIC_IP"
+          echo "Resolved: $RESOLVED_IP"
+          echo ""
+          echo "Please ensure your DNS record points to: $PUBLIC_IP"
+          echo "SSL certificate provisioning will fail until DNS is correctly configured."
+        else
+          echo "✅ DNS configuration is correct"
+        fi
+        
+    - name: Prepare SSL configuration script
+      run: |
+        cat > configure-ssl.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        
+        SITE_NAME="${{ github.event.inputs.site_name }}"
+        LETSENCRYPT_EMAIL="${{ github.event.inputs.email }}"
+        FORCE_RENEWAL="${{ github.event.inputs.force_renewal }}"
+        
+        echo "=== SSL/TLS Configuration Started ==="
+        echo "Site: $SITE_NAME"
+        echo "Email: $LETSENCRYPT_EMAIL"
+        echo "Force Renewal: $FORCE_RENEWAL"
+        echo "Timestamp: $(date)"
+        
+        cd /opt/erpnext/frappe_docker
+        
+        # Check if ERPNext is running
+        if ! docker compose --project-name erpnext -f ~/gitops/docker-compose.yml ps | grep -q "Up"; then
+          echo "❌ ERPNext containers are not running. Please deploy first."
+          exit 1
+        fi
+        
+        # Update environment file with SSL configuration
+        sed -i "s/SITES=.*/SITES=$SITE_NAME/" ~/gitops/erpnext.env
+        sed -i "s/LETSENCRYPT_EMAIL=.*/LETSENCRYPT_EMAIL=$LETSENCRYPT_EMAIL/" ~/gitops/erpnext.env
+        
+        # Regenerate docker-compose with HTTPS configuration
+        echo "Regenerating Docker Compose configuration with HTTPS..."
+        docker compose --project-name erpnext \
+          --env-file ~/gitops/erpnext.env \
+          -f compose.yaml \
+          -f overrides/compose.mariadb.yaml \
+          -f overrides/compose.redis.yaml \
+          -f overrides/compose.https.yaml \
+          config > ~/gitops/docker-compose.yml
+          
+        # If force renewal is requested, remove existing certificates
+        if [ "$FORCE_RENEWAL" = "true" ]; then
+          echo "Force renewal requested, removing existing certificates..."
+          docker volume rm erpnext_cert-data 2>/dev/null || true
+        fi
+        
+        # Restart services with new configuration
+        echo "Restarting services with SSL configuration..."
+        docker compose --project-name erpnext -f ~/gitops/docker-compose.yml down
+        docker compose --project-name erpnext -f ~/gitops/docker-compose.yml up -d
+        
+        # Wait for services to be ready
+        echo "Waiting for services to start..."
+        sleep 30
+        
+        # Check certificate provisioning
+        echo "Checking SSL certificate provisioning..."
+        for i in {1..20}; do
+          echo "Attempt $i: Checking SSL certificate..."
+          
+          # Check if Traefik has obtained certificate
+          CERT_STATUS=$(docker compose --project-name erpnext -f ~/gitops/docker-compose.yml logs proxy 2>/dev/null | grep -c "certificate obtained" || echo "0")
+          
+          if [ "$CERT_STATUS" -gt "0" ]; then
+            echo "✅ SSL certificate obtained successfully!"
+            break
+          elif [ $i -eq 20 ]; then
+            echo "⚠️  SSL certificate provisioning may be taking longer than expected"
+            echo "Checking Traefik logs for issues..."
+            docker compose --project-name erpnext -f ~/gitops/docker-compose.yml logs proxy | tail -20
+          else
+            echo "Waiting for certificate provisioning... (attempt $i/20)"
+            sleep 15
+          fi
+        done
+        
+        # Test HTTPS connectivity
+        echo "Testing HTTPS connectivity..."
+        for i in {1..10}; do
+          if curl -f -s "https://$SITE_NAME/api/method/ping" > /dev/null; then
+            echo "✅ HTTPS is working correctly!"
+            break
+          elif [ $i -eq 10 ]; then
+            echo "⚠️  HTTPS connectivity test failed"
+            echo "This could be due to:"
+            echo "1. DNS not pointing to the correct IP"
+            echo "2. Firewall blocking ports 80/443"
+            echo "3. Let's Encrypt rate limits"
+            echo ""
+            echo "Checking container status:"
+            docker compose --project-name erpnext -f ~/gitops/docker-compose.yml ps
+          else
+            echo "Waiting for HTTPS to be ready... (attempt $i/10)"
+            sleep 30
+          fi
+        done
+        
+        # Create SSL certificate monitoring script
+        cat > /opt/erpnext/check-ssl.sh << 'SSL_CHECK_EOF'
+        #!/bin/bash
+        SITE_NAME="${{ github.event.inputs.site_name }}"
+        
+        echo "=== SSL Certificate Status for $SITE_NAME ==="
+        echo "Timestamp: $(date)"
+        
+        # Check certificate expiry
+        if command -v openssl >/dev/null; then
+          CERT_INFO=$(echo | openssl s_client -servername $SITE_NAME -connect $SITE_NAME:443 2>/dev/null | openssl x509 -noout -dates 2>/dev/null)
+          echo "Certificate Information:"
+          echo "$CERT_INFO"
+          
+          # Calculate days until expiry
+          EXPIRY_DATE=$(echo "$CERT_INFO" | grep notAfter | cut -d= -f2)
+          if [ ! -z "$EXPIRY_DATE" ]; then
+            EXPIRY_EPOCH=$(date -d "$EXPIRY_DATE" +%s)
+            CURRENT_EPOCH=$(date +%s)
+            DAYS_UNTIL_EXPIRY=$(( (EXPIRY_EPOCH - CURRENT_EPOCH) / 86400 ))
+            
+            echo "Days until expiry: $DAYS_UNTIL_EXPIRY"
+            
+            if [ $DAYS_UNTIL_EXPIRY -lt 30 ]; then
+              echo "⚠️  Certificate expires in less than 30 days!"
+            else
+              echo "✅ Certificate is valid for $DAYS_UNTIL_EXPIRY more days"
+            fi
+          fi
+        fi
+        
+        # Test HTTPS connectivity
+        if curl -f -s "https://$SITE_NAME/api/method/ping" > /dev/null; then
+          echo "✅ HTTPS connectivity: OK"
+        else
+          echo "❌ HTTPS connectivity: FAILED"
+        fi
+        
+        # Check Traefik certificate status
+        echo ""
+        echo "Traefik Certificate Volume Status:"
+        docker volume inspect erpnext_cert-data > /dev/null 2>&1 && echo "✅ Certificate volume exists" || echo "❌ Certificate volume missing"
+        SSL_CHECK_EOF
+        
+        chmod +x /opt/erpnext/check-ssl.sh
+        
+        # Setup cron job for certificate monitoring (weekly check)
+        (crontab -l 2>/dev/null | grep -v check-ssl.sh; echo "0 6 * * 1 /opt/erpnext/check-ssl.sh >> /var/log/ssl-check.log 2>&1") | crontab -
+        
+        echo "=== SSL/TLS Configuration Completed ==="
+        echo "Site URL: https://$SITE_NAME"
+        echo "Certificate monitoring script created: /opt/erpnext/check-ssl.sh"
+        echo "Weekly SSL checks scheduled"
+        
+        # Run initial SSL check
+        /opt/erpnext/check-ssl.sh
+        EOF
+        
+        chmod +x configure-ssl.sh
+        
+    - name: Configure SSL via SSM
+      run: |
+        COMMAND_ID=$(aws ssm send-command \
+          --instance-ids ${{ steps.get-instance.outputs.instance_id }} \
+          --document-name "AWS-RunShellScript" \
+          --parameters commands="$(cat configure-ssl.sh | base64 -w 0 | base64 -d)" \
+          --query 'Command.CommandId' \
+          --output text)
+          
+        echo "Command ID: $COMMAND_ID"
+        echo "command_id=$COMMAND_ID" >> $GITHUB_ENV
+        
+        # Wait for command to complete
+        echo "Waiting for SSL configuration to complete..."
+        aws ssm wait command-executed \
+          --command-id $COMMAND_ID \
+          --instance-id ${{ steps.get-instance.outputs.instance_id }}
+          
+    - name: Get SSL configuration results
+      run: |
+        echo "=== SSL Configuration Results ==="
+        aws ssm get-command-invocation \
+          --command-id ${{ env.command_id }} \
+          --instance-id ${{ steps.get-instance.outputs.instance_id }} \
+          --query 'StandardOutputContent' \
+          --output text
+          
+        echo "=== Error Output (if any) ==="
+        aws ssm get-command-invocation \
+          --command-id ${{ env.command_id }} \
+          --instance-id ${{ steps.get-instance.outputs.instance_id }} \
+          --query 'StandardErrorContent' \
+          --output text
+          
+        # Check command status
+        STATUS=$(aws ssm get-command-invocation \
+          --command-id ${{ env.command_id }} \
+          --instance-id ${{ steps.get-instance.outputs.instance_id }} \
+          --query 'Status' \
+          --output text)
+          
+        echo "Command Status: $STATUS"
+        
+        if [ "$STATUS" != "Success" ]; then
+          echo "SSL configuration failed!"
+          exit 1
+        fi
+        
+    - name: Verify SSL certificate
+      run: |
+        SITE_NAME="${{ github.event.inputs.site_name }}"
+        
+        echo "=== SSL Certificate Verification ==="
+        
+        # Wait a bit for certificate propagation
+        sleep 30
+        
+        # Check SSL certificate
+        for i in {1..5}; do
+          echo "Attempt $i: Verifying SSL certificate..."
+          
+          if curl -f -s -I "https://$SITE_NAME" | head -n1 | grep -q "200"; then
+            echo "✅ HTTPS is working!"
+            
+            # Get certificate details
+            echo ""
+            echo "Certificate details:"
+            echo | openssl s_client -servername $SITE_NAME -connect $SITE_NAME:443 2>/dev/null | \
+              openssl x509 -noout -subject -issuer -dates
+            break
+          elif [ $i -eq 5 ]; then
+            echo "⚠️  SSL verification incomplete. This may be normal for new certificates."
+            echo "Please wait a few more minutes and check manually: https://$SITE_NAME"
+          else
+            echo "Waiting for SSL certificate to be ready..."
+            sleep 60
+          fi
+        done
+        
+    - name: Create SSL configuration summary
+      run: |
+        cat >> $GITHUB_STEP_SUMMARY << EOF
+        # 🔒 SSL/TLS Configuration Summary
+        
+        ## Configuration Details
+        - **Site**: ${{ github.event.inputs.site_name }}
+        - **Let's Encrypt Email**: ${{ github.event.inputs.email }}
+        - **Force Renewal**: ${{ github.event.inputs.force_renewal }}
+        - **Configured At**: $(date -u)
+        - **Public IP**: ${{ steps.get-instance.outputs.public_ip }}
+        
+        ## SSL Features Configured
+        - ✅ Let's Encrypt SSL certificate
+        - ✅ Automatic HTTPS redirect
+        - ✅ Traefik reverse proxy
+        - ✅ Certificate auto-renewal
+        - ✅ Weekly certificate monitoring
+        
+        ## Access Information
+        - **Secure URL**: https://${{ github.event.inputs.site_name }}
+        - **Certificate Authority**: Let's Encrypt
+        - **Auto-renewal**: Enabled (Traefik handles this automatically)
+        
+        ## Monitoring
+        - SSL certificate status is checked weekly
+        - Logs available at: /var/log/ssl-check.log
+        - Manual check command: /opt/erpnext/check-ssl.sh
+        
+        ## Troubleshooting
+        If SSL is not working:
+        1. Verify DNS points to: ${{ steps.get-instance.outputs.public_ip }}
+        2. Ensure ports 80 and 443 are open
+        3. Check for Let's Encrypt rate limits
+        4. Review Traefik logs: docker compose logs proxy
+        
+        ## Next Steps
+        1. Test your site at: https://${{ github.event.inputs.site_name }}
+        2. Verify the SSL certificate in your browser
+        3. Monitor weekly SSL check logs
+        EOF

@@ -1,0 +1,330 @@
+name: Epic 2 - Automated ERPNext Deployment
+on:
+  push:
+    branches: [ develop ]
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: 'Force deployment even if no changes'
+        required: false
+        default: 'false'
+        type: boolean
+      site_name:
+        description: 'Site name to deploy (default: staging.example.com)'
+        required: false
+        default: 'staging.example.com'
+        type: string
+
+env:
+  AWS_REGION: us-east-1
+  TERRAFORM_DIR: iac/aws/ec2/terraform
+
+jobs:
+  deploy:
+    name: Deploy ERPNext to EC2
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+        
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.5.0
+        terraform_wrapper: false
+        
+    - name: Get EC2 instance information
+      id: get-instance
+      working-directory: ${{ env.TERRAFORM_DIR }}
+      run: |
+        terraform init -backend-config=backend-config.tf
+        INSTANCE_ID=$(terraform output -raw instance_id)
+        PUBLIC_IP=$(terraform output -raw elastic_ip_address)
+        echo "instance_id=$INSTANCE_ID" >> $GITHUB_OUTPUT
+        echo "public_ip=$PUBLIC_IP" >> $GITHUB_OUTPUT
+        echo "Instance ID: $INSTANCE_ID"
+        echo "Public IP: $PUBLIC_IP"
+        
+    - name: Wait for instance to be ready
+      run: |
+        echo "Waiting for instance ${{ steps.get-instance.outputs.instance_id }} to be running..."
+        aws ec2 wait instance-running --instance-ids ${{ steps.get-instance.outputs.instance_id }}
+        echo "Instance is running"
+        
+    - name: Prepare deployment script
+      run: |
+        cat > deploy-erpnext.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        
+        # Configuration
+        SITE_NAME="${{ github.event.inputs.site_name || 'staging.example.com' }}"
+        LETSENCRYPT_EMAIL="${{ secrets.LETSENCRYPT_EMAIL }}"
+        DB_PASSWORD="${{ secrets.DB_PASSWORD }}"
+        ADMIN_PASSWORD="${{ secrets.ADMIN_PASSWORD }}"
+        
+        echo "=== ERPNext Deployment Started ==="
+        echo "Site: $SITE_NAME"
+        echo "Timestamp: $(date)"
+        
+        # Update system
+        sudo yum update -y
+        
+        # Ensure Docker is running
+        sudo systemctl start docker
+        sudo systemctl enable docker
+        
+        # Create deployment directory
+        sudo mkdir -p /opt/erpnext
+        cd /opt/erpnext
+        
+        # Clone or update frappe_docker repository
+        if [ -d "frappe_docker" ]; then
+            echo "Updating existing frappe_docker repository..."
+            cd frappe_docker
+            git fetch origin
+            git reset --hard origin/main
+        else
+            echo "Cloning frappe_docker repository..."
+            git clone https://github.com/frappe/frappe_docker.git
+            cd frappe_docker
+        fi
+        
+        # Create gitops directory for configurations
+        mkdir -p ~/gitops
+        
+        # Create environment file for ERPNext
+        cat > ~/gitops/erpnext.env << EOL
+        # ERPNext Configuration
+        FRAPPE_VERSION=version-15
+        ERPNEXT_VERSION=version-15
+        DB_PASSWORD=$DB_PASSWORD
+        DB_HOST=db
+        DB_PORT=3306
+        REDIS_CACHE=redis-cache:6379
+        REDIS_QUEUE=redis-queue:6379
+        SITES=$SITE_NAME
+        LETSENCRYPT_EMAIL=$LETSENCRYPT_EMAIL
+        EOL
+        
+        # Generate docker-compose configuration with HTTPS
+        echo "Generating Docker Compose configuration..."
+        docker compose --project-name erpnext \
+          --env-file ~/gitops/erpnext.env \
+          -f compose.yaml \
+          -f overrides/compose.mariadb.yaml \
+          -f overrides/compose.redis.yaml \
+          -f overrides/compose.https.yaml \
+          config > ~/gitops/docker-compose.yml
+        
+        # Deploy containers
+        echo "Deploying ERPNext containers..."
+        docker compose --project-name erpnext -f ~/gitops/docker-compose.yml up -d
+        
+        # Wait for services to be ready
+        echo "Waiting for services to be ready..."
+        sleep 30
+        
+        # Check if site exists, create if not
+        SITE_EXISTS=$(docker compose --project-name erpnext -f ~/gitops/docker-compose.yml exec -T backend bash -c "ls sites/ | grep -c $SITE_NAME" || echo "0")
+        
+        if [ "$SITE_EXISTS" = "0" ]; then
+            echo "Creating new site: $SITE_NAME"
+            docker compose --project-name erpnext -f ~/gitops/docker-compose.yml exec -T backend \
+              bench new-site $SITE_NAME \
+              --mariadb-user-host-login-scope=% \
+              --admin-password=$ADMIN_PASSWORD \
+              --db-root-password=$DB_PASSWORD \
+              --install-app erpnext \
+              --set-default
+        else
+            echo "Site $SITE_NAME already exists, running migrations..."
+            docker compose --project-name erpnext -f ~/gitops/docker-compose.yml exec -T backend \
+              bench --site $SITE_NAME migrate
+        fi
+        
+        # Restart services to ensure everything is working
+        docker compose --project-name erpnext -f ~/gitops/docker-compose.yml restart
+        
+        # Setup backup configuration
+        echo "Setting up backup configuration..."
+        
+        # Create backup script
+        cat > /opt/erpnext/backup-to-s3.sh << 'BACKUP_EOF'
+        #!/bin/bash
+        set -e
+        
+        SITE_NAME="${{ github.event.inputs.site_name || 'staging.example.com' }}"
+        TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+        BACKUP_DIR="/tmp/backup_$TIMESTAMP"
+        
+        echo "Starting backup for site: $SITE_NAME at $(date)"
+        
+        # Create backup directory
+        mkdir -p $BACKUP_DIR
+        
+        # Create backup using Frappe's backup command
+        cd /opt/erpnext/frappe_docker
+        docker compose --project-name erpnext -f ~/gitops/docker-compose.yml exec -T backend \
+          bench --site $SITE_NAME backup --with-files
+        
+        # Copy backup files to local directory
+        docker compose --project-name erpnext -f ~/gitops/docker-compose.yml exec -T backend \
+          bash -c "cd sites/$SITE_NAME && tar -czf /tmp/site-backup-$TIMESTAMP.tar.gz private/backups/"
+        
+        docker cp $(docker compose --project-name erpnext -f ~/gitops/docker-compose.yml ps -q backend):/tmp/site-backup-$TIMESTAMP.tar.gz $BACKUP_DIR/
+        
+        # Upload to S3 if bucket is configured
+        if [ ! -z "${BACKUP_S3_BUCKET:-}" ]; then
+            echo "Uploading backup to S3..."
+            aws s3 cp $BACKUP_DIR/site-backup-$TIMESTAMP.tar.gz s3://$BACKUP_S3_BUCKET/backups/
+            echo "Backup uploaded to S3: s3://$BACKUP_S3_BUCKET/backups/site-backup-$TIMESTAMP.tar.gz"
+        fi
+        
+        # Cleanup old backups (keep last 7 days)
+        find /tmp -name "backup_*" -type d -mtime +7 -exec rm -rf {} \;
+        find /tmp -name "site-backup-*.tar.gz" -mtime +7 -delete
+        
+        echo "Backup completed successfully at $(date)"
+        BACKUP_EOF
+        
+        chmod +x /opt/erpnext/backup-to-s3.sh
+        
+        # Setup cron job for daily backups
+        (crontab -l 2>/dev/null; echo "0 2 * * * /opt/erpnext/backup-to-s3.sh >> /var/log/erpnext-backup.log 2>&1") | crontab -
+        
+        # Create status endpoint
+        cat > /opt/erpnext/check-status.sh << 'STATUS_EOF'
+        #!/bin/bash
+        cd /opt/erpnext/frappe_docker
+        docker compose --project-name erpnext -f ~/gitops/docker-compose.yml ps
+        echo "ERPNext site status for: ${{ github.event.inputs.site_name || 'staging.example.com' }}"
+        curl -f -s "https://${{ github.event.inputs.site_name || 'staging.example.com' }}/api/method/ping" || echo "Site not accessible"
+        STATUS_EOF
+        
+        chmod +x /opt/erpnext/check-status.sh
+        
+        echo "=== ERPNext Deployment Completed ==="
+        echo "Site URL: https://$SITE_NAME"
+        echo "Admin Username: Administrator"
+        echo "Please check the site accessibility in a few minutes for SSL certificate provisioning"
+        
+        # Final status check
+        /opt/erpnext/check-status.sh
+        EOF
+        
+        chmod +x deploy-erpnext.sh
+        
+    - name: Deploy ERPNext via SSM
+      run: |
+        COMMAND_ID=$(aws ssm send-command \
+          --instance-ids ${{ steps.get-instance.outputs.instance_id }} \
+          --document-name "AWS-RunShellScript" \
+          --parameters commands="$(cat deploy-erpnext.sh | base64 -w 0 | base64 -d)" \
+          --query 'Command.CommandId' \
+          --output text)
+          
+        echo "Command ID: $COMMAND_ID"
+        echo "command_id=$COMMAND_ID" >> $GITHUB_ENV
+        
+        # Wait for command to complete
+        echo "Waiting for deployment to complete..."
+        aws ssm wait command-executed \
+          --command-id $COMMAND_ID \
+          --instance-id ${{ steps.get-instance.outputs.instance_id }}
+          
+    - name: Get deployment results
+      run: |
+        echo "=== Deployment Results ==="
+        aws ssm get-command-invocation \
+          --command-id ${{ env.command_id }} \
+          --instance-id ${{ steps.get-instance.outputs.instance_id }} \
+          --query 'StandardOutputContent' \
+          --output text
+          
+        echo "=== Error Output (if any) ==="
+        aws ssm get-command-invocation \
+          --command-id ${{ env.command_id }} \
+          --instance-id ${{ steps.get-instance.outputs.instance_id }} \
+          --query 'StandardErrorContent' \
+          --output text
+          
+        # Check command status
+        STATUS=$(aws ssm get-command-invocation \
+          --command-id ${{ env.command_id }} \
+          --instance-id ${{ steps.get-instance.outputs.instance_id }} \
+          --query 'Status' \
+          --output text)
+          
+        echo "Command Status: $STATUS"
+        
+        if [ "$STATUS" != "Success" ]; then
+          echo "Deployment failed!"
+          exit 1
+        fi
+        
+    - name: Run post-deployment verification
+      run: |
+        SITE_NAME="${{ github.event.inputs.site_name || 'staging.example.com' }}"
+        
+        echo "=== Post-Deployment Verification ==="
+        echo "Site URL: https://$SITE_NAME"
+        echo "Public IP: ${{ steps.get-instance.outputs.public_ip }}"
+        
+        # Check if site responds (with retries for SSL certificate provisioning)
+        for i in {1..10}; do
+          echo "Attempt $i: Checking site accessibility..."
+          if curl -f -s -k "https://$SITE_NAME/api/method/ping" > /dev/null; then
+            echo "✅ Site is accessible!"
+            break
+          elif [ $i -eq 10 ]; then
+            echo "⚠️  Site may not be ready yet. SSL certificate provisioning can take a few minutes."
+            echo "Please check manually: https://$SITE_NAME"
+          else
+            echo "Site not ready, waiting 30 seconds..."
+            sleep 30
+          fi
+        done
+        
+    - name: Create deployment summary
+      run: |
+        cat >> $GITHUB_STEP_SUMMARY << EOF
+        # 🚀 ERPNext Deployment Summary
+        
+        ## Deployment Details
+        - **Site URL**: https://${{ github.event.inputs.site_name || 'staging.example.com' }}
+        - **Instance ID**: ${{ steps.get-instance.outputs.instance_id }}
+        - **Public IP**: ${{ steps.get-instance.outputs.public_ip }}
+        - **Deployed At**: $(date -u)
+        - **Branch**: ${{ github.ref_name }}
+        - **Commit**: ${{ github.sha }}
+        
+        ## Access Information
+        - **ERPNext URL**: https://${{ github.event.inputs.site_name || 'staging.example.com' }}
+        - **Admin Username**: Administrator
+        - **Admin Password**: (See GitHub Secrets)
+        
+        ## Features Deployed
+        - ✅ ERPNext application with Docker Compose
+        - ✅ Automatic SSL/TLS with Let's Encrypt
+        - ✅ Automated daily backups to S3
+        - ✅ MariaDB database
+        - ✅ Redis caching and queues
+        
+        ## Next Steps
+        1. Wait 2-5 minutes for SSL certificate provisioning
+        2. Access the site at the URL above
+        3. Login with Administrator and the configured password
+        4. Configure your ERPNext instance
+        
+        ## Backup Schedule
+        Daily backups are configured to run at 2:00 AM UTC and will be stored in the configured S3 bucket.
+        EOF
