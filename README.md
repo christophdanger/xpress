@@ -3,7 +3,9 @@ An easy way to deliver the Frappe Framework to common IaaS, PaaS, and local syst
 
 ## Overview
 
-xpress is a set of tooling to deliver, setup, and maintain infrastructure and configuration for hosting [Frappe Framework](https://frappeframework.com/) based applications (like [ERPNext](https://erpnext.com/)).
+xpress is a reference implementation library for deploying, setting up, and maintaining infrastructure and configuration for hosting [Frappe Framework](https://frappeframework.com/) based applications (like [ERPNext](https://erpnext.com/)).
+
+> **Important**: This repository serves as a **reference implementation library**, not a direct deployment repository. All components are designed to be copied, customized, and used in your own projects.
 
 The current minimum system requirements/packages can be found here on [Frappe's docs](https://github.com/frappe/bench/blob/develop/docs/installation.md#manual-install).
 
@@ -13,6 +15,8 @@ The current minimum system requirements/packages can be found here on [Frappe's 
 xpress/
 ├── docs/                       # Documentation and requirements
 │   └── aws/                    # AWS-specific documentation
+├── examples/                   # Example implementations
+│   └── aws-ec2-standalone/     # Complete deployment example
 ├── iac/                        # Infrastructure as Code
 │   ├── aws/                    # Amazon Web Services
 │   │   ├── ec2/                # EC2 single-instance deployment
@@ -20,8 +24,43 @@ xpress/
 │   │   └── eks/                # EKS Kubernetes deployment (planned)
 │   ├── azure/                  # Microsoft Azure (planned)
 │   └── gcp/                    # Google Cloud Platform (planned)
+├── templates/                  # Reusable templates
+│   └── github-actions/         # GitHub Actions workflow templates
 └── README.md                   # This file
 ```
+
+## Quick Start
+
+### Using xpress in Your Project
+
+1. **Copy infrastructure code**:
+   ```bash
+   # Copy Terraform infrastructure
+   cp -r iac/aws/ec2/terraform/ /your-project/iac/aws/ec2/
+   ```
+
+2. **Copy workflow templates**:
+   ```bash
+   # Copy GitHub Actions templates (remove .template extension)
+   cp templates/github-actions/deploy-erpnext.yml.template /your-project/.github/workflows/deploy-erpnext.yml
+   ```
+
+3. **Follow the complete example**:
+   See [examples/aws-ec2-standalone](examples/aws-ec2-standalone/README.md) for a complete implementation guide.
+
+## Templates Available
+
+### Infrastructure Templates
+- **AWS EC2**: Complete Terraform infrastructure for single-instance deployment
+- **AWS ECS**: Production-ready containers with managed services (planned)
+- **AWS EKS**: Enterprise Kubernetes deployment (planned)
+
+### Automation Templates  
+- **GitHub Actions**: Complete DevOps workflows for deployment, SSL, backups, monitoring, and disaster recovery
+- **Terraform**: Infrastructure as Code with backend and resource management
+- **Docker Compose**: Application orchestration configurations
+
+**Template Documentation**: [templates/README.md](templates/README.md)
 
 ## Infrastructure Deployments
 
