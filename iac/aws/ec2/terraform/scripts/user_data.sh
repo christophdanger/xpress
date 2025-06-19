@@ -1,53 +1,49 @@
 #!/bin/bash
-# User data script for ERPNext EC2 instance initialization
-# This script sets up the basic environment for ERPNext deployment
-
-set -e
+# User data script for ERPNext EC2 instance
+# Basic system setup and preparation for ERPNext installation
 
 # Update system packages
 yum update -y
 
-# Install required packages
+# Install basic utilities
 yum install -y \
-    docker \
-    docker-compose \
-    git \
-    awscli \
-    htop \
-    wget \
     curl \
-    unzip
+    wget \
+    git \
+    htop \
+    unzip \
+    vim
 
-# Start and enable Docker
-systemctl start docker
+# Create a log file for user data execution
+LOG_FILE="/var/log/user-data.log"
+exec > >(tee -a $LOG_FILE)
+exec 2>&1
+
+echo "$(date): Starting user data script execution"
+echo "Project: ${project_name}"
+echo "Environment: ${environment}"
+
+# Install Docker (for future ERPNext containerized deployment)
+yum install -y docker
 systemctl enable docker
+systemctl start docker
 
 # Add ec2-user to docker group
 usermod -aG docker ec2-user
 
-# Install Docker Compose (latest version)
+# Install Docker Compose
 curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
 chmod +x /usr/local/bin/docker-compose
 
-# Create application directory
+# Create directory structure for ERPNext
 mkdir -p /opt/erpnext
 chown ec2-user:ec2-user /opt/erpnext
 
-# Clone frappe_docker repository
-cd /opt/erpnext
-git clone https://github.com/frappe/frappe_docker.git
-chown -R ec2-user:ec2-user frappe_docker
+# Set hostname
+hostnamectl set-hostname ${project_name}-${environment}
 
-# Create environment file
-cat > /opt/erpnext/.env << EOF
-# ERPNext Configuration
-ERPNEXT_VERSION=v14
-FRAPPE_VERSION=v14
-MYSQL_ROOT_PASSWORD=$(openssl rand -base64 32)
-LETSENCRYPT_EMAIL=admin@example.com
-BACKUP_BUCKET=${backup_bucket}
-PROJECT_NAME=${project_name}
-EOF
+echo "$(date): User data script execution completed"
+echo "Instance ready for ERPNext deployment"
 
 # Set permissions
 chown ec2-user:ec2-user /opt/erpnext/.env

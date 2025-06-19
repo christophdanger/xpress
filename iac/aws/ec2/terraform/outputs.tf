@@ -33,3 +33,26 @@ output "aws_region" {
   description = "AWS region where resources are deployed"
   value       = var.aws_region
 }
+
+# ===========================================
+# COMPUTE OUTPUTS (User Story 1.3)
+# ===========================================
+output "instance_id" {
+  description = "ID of the ERPNext EC2 instance"
+  value       = aws_instance.erpnext.id
+}
+
+output "instance_public_ip" {
+  description = "Public IP address of the ERPNext instance"
+  value       = aws_instance.erpnext.public_ip
+}
+
+output "instance_public_dns" {
+  description = "Public DNS name of the ERPNext instance"
+  value       = aws_instance.erpnext.public_dns
+}
+
+output "security_group_id" {
+  description = "ID of the ERPNext security group"
+  value       = aws_security_group.erpnext_sg.id
+}

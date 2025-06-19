@@ -33,3 +33,24 @@ variable "public_subnet_cidr" {
   type        = string
   default     = "10.0.1.0/24"
 }
+
+# ===========================================
+# COMPUTE VARIABLES (User Story 1.3)
+# ===========================================
+variable "instance_type" {
+  description = "EC2 instance type for ERPNext"
+  type        = string
+  default     = "t3.medium"
+}
+
+variable "root_volume_size" {
+  description = "Size of the root EBS volume in GB"
+  type        = number
+  default     = 20
+}
+
+variable "ami_id" {
+  description = "AMI ID for the EC2 instance (Amazon Linux 2)"
+  type        = string
+  default     = "ami-02b3c03c6fadb6e2c" # Latest Amazon Linux 2 AMI in us-east-1
+}
