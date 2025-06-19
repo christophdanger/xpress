@@ -665,77 +665,380 @@ build-custom-images:
         path: custom-erpnext.tar.gz
 ```
 
-## Common Pitfalls and Solutions
+## Complete Development Workflow: From Code to Production
 
-### Pitfall 1: Building Images Inside Dev Container
-```bash
-# ❌ This won't work:
-# (inside dev container)
-docker build -t custom-image .
+### The Git Repository Problem in Dev Containers
 
-# ✅ Do this instead:
-# Exit dev container, build in main environment
-exit  # Exit dev container
-docker build -t custom-image .
+You've identified the core issue: **frappe_docker dev containers don't have git repositories by default**, and your changes seem to disappear. Here's the complete workflow to solve this:
+
+### Understanding the File Mounting Structure
+
+When you use frappe_docker dev containers:
+
+```
+Host Machine:
+├── frappe_docker/              # The frappe_docker repository
+│   ├── .devcontainer/         # Dev container config  
+│   └── development/           # ⚠️ This directory is mounted INTO the container
+       └── (empty initially)
+
+Inside Dev Container:
+├── /workspace/
+│   ├── development/           # Mounted from host
+│   └── frappe_docker/         # Read-only frappe_docker files
 ```
 
-### Pitfall 2: Mixing Development and Production Configs
+**Key insight**: The `development/` directory is mounted from your host machine, so anything you create there persists.
+
+## Complete Development Workflow
+
+### Phase 1: Initial Setup (One Time)
+
+#### Step 1: Set Up Directory Structure on Host
 ```bash
-# ❌ Don't use development docker-compose for production
-docker-compose -f development/docker-compose.yml up
+# On your host machine (NOT in dev container)
+mkdir -p ~/projects/my-erpnext-project
+cd ~/projects/my-erpnext-project
 
-# ✅ Use production compose files
-docker-compose -f compose.yaml -f overrides/compose.https.yaml up
-```
+# Create the structure
+mkdir -p frappe_docker
+mkdir -p custom-apps
+mkdir -p deployment-config
 
-### Pitfall 3: Not Understanding Image Layers
-```bash
-# ✅ Understand what goes into your custom image:
-# 1. Base Frappe/ERPNext image
-# 2. Your custom apps (installed via pip/git)
-# 3. Your configurations
-# 4. Your customizations
-```
-
-## Recommended Development Workflow
-
-### For Development (Local coding):
-1. Use VS Code Dev Containers mode
-2. Code and test inside the container
-3. Use `bench` commands for development tasks
-
-### For Production Image Building:
-1. Exit dev container mode
-2. Work in main repository with frappe_docker
-3. Build custom images with your apps
-4. Test images locally
-5. Push to registry
-
-### For Deployment:
-1. Use GitHub Actions workflows
-2. Pull pre-built images or build during deployment
-3. Deploy to staging/production servers
-
-## Example Complete Workflow
-
-```bash
-# 1. Development phase
+# Clone frappe_docker
+git clone https://github.com/frappe/frappe_docker.git frappe_docker/
 cd frappe_docker
-code .  # Opens in dev container
-# ... do development work inside container ...
-
-# 2. Image building phase  
-# Exit VS Code dev container mode
-cd frappe_docker  # Now in main environment
-./build-custom-images.sh  # Your build script
-docker push your-registry/custom-erpnext:latest
-
-# 3. Deployment phase
-git push origin main  # Triggers GitHub Actions
-# ... workflows deploy using your custom images ...
 ```
 
-This approach separates concerns clearly:
-- **Dev containers**: For development and testing
-- **Main environment**: For building production images  
-- **CI/CD**: For automated deployment
+#### Step 2: Prepare Dev Container for Custom Development
+```bash
+# Still on host machine, in frappe_docker directory
+cp -R devcontainer-example .devcontainer
+cp -R development/vscode-example development/.vscode
+
+# Create development directories that will persist
+mkdir -p development/frappe-bench
+mkdir -p development/custom-apps
+```
+
+#### Step 3: Set Up Your Custom App Repository
+```bash
+# Create your custom app repository (on host)
+cd ~/projects/my-erpnext-project/custom-apps
+git init my-custom-app
+cd my-custom-app
+
+# Create initial app structure
+mkdir -p my_custom_app
+echo "# My Custom ERPNext App" > README.md
+git add .
+git commit -m "Initial commit"
+
+# Push to GitHub
+git remote add origin https://github.com/your-username/my-custom-app.git
+git push -u origin main
+```
+
+### Phase 2: Development Workflow
+
+#### Step 1: Enter Dev Container for Development
+```bash
+# Open frappe_docker in VS Code
+cd ~/projects/my-erpnext-project/frappe_docker
+code .
+
+# VS Code will detect .devcontainer and ask to reopen in container
+# Click "Reopen in Container"
+```
+
+#### Step 2: Set Up Bench in Dev Container (First Time)
+```bash
+# Now you're inside the dev container
+# The development/ directory is mounted from your host
+
+cd /workspace/development
+
+# Initialize bench (this creates files in the mounted directory)
+bench init --skip-redis-config-generation --frappe-branch version-14 frappe-bench
+cd frappe-bench
+
+# Configure for dev containers
+bench set-config -g db_host mariadb
+bench set-config -g redis_cache redis://redis-cache:6379
+bench set-config -g redis_queue redis://redis-queue:6379
+bench set-config -g redis_socketio redis://redis-queue:6379
+
+# Remove redis from Procfile (using containers)
+sed -i '/redis/d' ./Procfile
+
+# Create new site
+bench new-site --no-mariadb-socket development.localhost
+# Password: 123 (mariadb root password)
+
+# Enable developer mode
+bench --site development.localhost set-config developer_mode 1
+bench --site development.localhost clear-cache
+```
+
+#### Step 3: Add Your Custom App to Development
+```bash
+# Still inside dev container, in /workspace/development/frappe-bench
+
+# Get your custom app (method 1: from existing repo)
+bench get-app https://github.com/your-username/my-custom-app.git
+
+# OR method 2: create new app
+bench new-app my_custom_app
+
+# Install app on site
+bench --site development.localhost install-app my_custom_app
+```
+
+#### Step 4: Set Up Git Tracking for Your Custom App
+```bash
+# The key insight: Your app code is in the mounted development/ directory
+cd /workspace/development/frappe-bench/apps/my_custom_app
+
+# This directory IS persistent and can have its own git repository
+git init
+git remote add origin https://github.com/your-username/my-custom-app.git
+
+# Make your changes
+# Edit files in my_custom_app/
+# Add docTypes, custom scripts, etc.
+
+# Commit changes
+git add .
+git commit -m "Add custom functionality"
+git push origin main
+```
+
+### Phase 3: Development Day-to-Day Workflow
+
+#### Daily Development Process:
+```bash
+# 1. Start development
+cd ~/projects/my-erpnext-project/frappe_docker
+code .  # Opens in dev container
+
+# 2. Inside dev container - start bench
+cd /workspace/development/frappe-bench
+bench start
+
+# 3. Access ERPNext at http://development.localhost:8000
+# Make your changes to custom apps
+
+# 4. Your changes are in: /workspace/development/frappe-bench/apps/my_custom_app/
+# This directory is mounted from host, so changes persist
+
+# 5. Commit changes
+cd /workspace/development/frappe-bench/apps/my_custom_app
+git add .
+git commit -m "Add new feature"
+git push
+```
+
+#### File Persistence Mapping:
+```
+Host Machine Path: ~/projects/my-erpnext-project/frappe_docker/development/
+    ↕ (mounted as)
+Container Path: /workspace/development/
+
+So when you edit files in the container at:
+/workspace/development/frappe-bench/apps/my_custom_app/
+
+They actually exist on your host at:
+~/projects/my-erpnext-project/frappe_docker/development/frappe-bench/apps/my_custom_app/
+```
+
+### Phase 4: Local Production Testing
+
+#### Step 1: Exit Dev Container and Build Production Images
+```bash
+# Exit VS Code dev container mode
+cd ~/projects/my-erpnext-project/frappe_docker
+
+# Create apps.json with your custom app
+cat > apps.json << EOF
+[
+  {
+    "url": "https://github.com/frappe/erpnext",
+    "branch": "version-14"
+  },
+  {
+    "url": "https://github.com/your-username/my-custom-app",
+    "branch": "main"
+  }
+]
+EOF
+
+# Build custom image with your app
+export APPS_JSON_BASE64=$(base64 -w 0 apps.json)
+docker build \
+  --build-arg APPS_JSON_BASE64=$APPS_JSON_BASE64 \
+  --tag my-custom-erpnext:latest \
+  --file images/custom/Containerfile .
+```
+
+#### Step 2: Test Production Image Locally
+```bash
+# Create production test environment
+cat > docker-compose.production-test.yml << EOF
+version: "3.7"
+
+x-customizable-image: &customizable_image my-custom-erpnext:latest
+
+services:
+  backend:
+    <<: *customizable_image
+    deploy:
+      replicas: 1
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+
+  # ... rest of your production config
+EOF
+
+# Test with production image
+docker-compose -f docker-compose.production-test.yml up
+```
+
+### Phase 5: Deployment Workflow
+
+#### Step 1: Prepare for Production Deployment
+```bash
+# Push your custom app changes
+cd ~/projects/my-erpnext-project/frappe_docker/development/frappe-bench/apps/my_custom_app
+git push origin main
+
+# Build and push production image
+cd ~/projects/my-erpnext-project/frappe_docker
+docker build \
+  --build-arg APPS_JSON_BASE64=$APPS_JSON_BASE64 \
+  --tag your-dockerhub-username/my-custom-erpnext:v1.0.0 \
+  --file images/custom/Containerfile .
+
+docker push your-dockerhub-username/my-custom-erpnext:v1.0.0
+```
+
+#### Step 2: Update GitHub Actions Workflow
+```yaml
+# In your deployment repository's .github/workflows/deploy-erpnext.yml
+env:
+  CUSTOM_ERPNEXT_IMAGE: your-dockerhub-username/my-custom-erpnext:v1.0.0
+
+steps:
+  - name: Deploy with custom image
+    run: |
+      echo "ERPNEXT_IMAGE=${{ env.CUSTOM_ERPNEXT_IMAGE }}" >> ~/gitops/erpnext.env
+      # ... rest of deployment
+```
+
+## Project Structure Best Practices
+
+### Recommended Directory Structure:
+```
+~/projects/my-erpnext-project/
+├── frappe_docker/                          # frappe_docker repo
+│   ├── .devcontainer/                     # Dev container config
+│   ├── development/                       # Mounted into container
+│   │   └── frappe-bench/                  # Created by bench init
+│   │       ├── apps/
+│   │       │   ├── frappe/               # Standard frappe
+│   │       │   ├── erpnext/              # Standard erpnext
+│   │       │   └── my_custom_app/        # ✅ Your app with git repo
+│   │       └── sites/
+│   ├── images/                           # For building custom images
+│   └── compose.yaml                      # Production compose
+├── deployment-config/                     # xpress templates
+│   ├── .github/workflows/
+│   └── iac/
+└── README.md                             # Project documentation
+```
+
+### Git Repository Structure:
+```
+Your Custom App Repo (my-custom-app):
+├── my_custom_app/
+│   ├── __init__.py
+│   ├── hooks.py
+│   ├── modules.txt
+│   └── my_custom_app/
+│       ├── doctype/
+│       ├── custom/
+│       └── public/
+├── setup.py
+└── README.md
+
+Your Deployment Config Repo:
+├── .github/workflows/          # xpress workflows
+├── iac/                       # Terraform infrastructure  
+└── docker-compose.production.yml
+```
+
+## Common Issues and Solutions
+
+### Issue 1: "My changes disappeared when I restart the container"
+```bash
+# ✅ Solution: Ensure you're working in the mounted directory
+cd /workspace/development/frappe-bench/apps/my_custom_app
+pwd  # Should show /workspace/development/...
+
+# ❌ Don't work in: /home/frappe/frappe-bench (not mounted)
+```
+
+### Issue 2: "Git doesn't work in the dev container"
+```bash
+# ✅ Solution: Configure git in the dev container
+git config --global user.email "you@example.com" 
+git config --global user.name "Your Name"
+
+# Or add to .devcontainer/devcontainer.json:
+"postCreateCommand": "git config --global user.email 'you@example.com'"
+```
+
+### Issue 3: "I can't see my changes in production"
+```bash
+# ✅ Solution: You need to rebuild and redeploy the image
+# 1. Commit changes to your custom app
+# 2. Rebuild the custom Docker image
+# 3. Push the new image to registry
+# 4. Update deployment to use new image tag
+```
+
+### Issue 4: "Development and production behave differently"
+```bash
+# ✅ Solution: Test with production image locally before deploying
+docker-compose -f docker-compose.production-test.yml up
+```
+
+## Summary: Complete Workflow Checklist
+
+### ✅ One-Time Setup:
+1. Create project directory structure
+2. Clone frappe_docker
+3. Set up dev container
+4. Create custom app repository
+5. Set up deployment configuration
+
+### ✅ Daily Development:
+1. Open frappe_docker in VS Code (dev container mode)
+2. Start bench development server
+3. Make changes to custom apps
+4. Test changes locally
+5. Commit and push custom app changes
+
+### ✅ Production Release:
+1. Exit dev container mode
+2. Build production image with custom apps
+3. Test production image locally
+4. Push image to registry
+5. Deploy via GitHub Actions
+
+This workflow gives you:
+- ✅ Persistent development environment
+- ✅ Version controlled custom code
+- ✅ Local production testing
+- ✅ Automated deployment pipeline
+- ✅ Clear separation of concerns
