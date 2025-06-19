@@ -140,7 +140,6 @@ cp -R development/vscode-example development/.vscode
 # Keep this as the official repo so you can pull updates:
 # git pull origin main  # (when Frappe releases updates)
 ```
-```
 
 ### Step 3: Copy xpress Templates
 
@@ -348,6 +347,10 @@ terraform plan
 
 ### Step 2: Deploy S3 Backend
 
+You can deploy the Terraform backend using the provided script or manually with Terraform commands. Note that the script encapsulates the same Terraform commands, so running both options in the same directory would duplicate the deployment.
+
+#### Option 1: Using the Script
+
 ```bash
 # Deploy the Terraform backend
 ./scripts/deploy-backend.sh
@@ -358,7 +361,28 @@ terraform plan
 # - IAM policies for access
 ```
 
+#### Option 2: Manual Deployment
+
+Navigate to the `bootstrap` directory before running the commands:
+
+```bash
+# Change to bootstrap directory
+cd bootstrap
+
+# Initialize Terraform
+terraform init
+terraform validate
+terraform plan
+terraform apply
+
+# Follow the prompts to confirm the deployment.
+```
+
 ### Step 3: Deploy Main Infrastructure
+
+You can deploy the main infrastructure using the provided script or manually with Terraform commands. Note that the script encapsulates the same Terraform commands, so running both options in the same directory would duplicate the deployment.
+
+#### Option 1: Using the Script
 
 ```bash
 # Deploy the main infrastructure
@@ -369,6 +393,23 @@ terraform plan
 # - EC2 instance with security group
 # - S3 bucket for backups
 # - IAM roles and policies
+```
+
+#### Option 2: Manual Deployment
+
+Navigate to the main Terraform directory before running the commands:
+
+```bash
+# Change to main Terraform directory
+cd iac/aws/ec2/terraform
+
+# Initialize Terraform
+terraform init
+terraform validate
+terraform plan
+terraform apply
+
+# Follow the prompts to confirm the deployment.
 ```
 
 ### Step 4: Verify Infrastructure
@@ -850,7 +891,7 @@ This completes your comprehensive testing of the xpress ERPNext deployment workf
 ### NOT Your Repository: frappe_docker (Official)
 - **What**: Official Frappe Docker setup and configuration
 - **Where**: `~/projects/my-erpnext-project/frappe_docker/`
-- **How it works**: Keep this as the official Frappe repository
+- **Purpose**: Keep this as the official Frappe repository
 - **Why**: So you can pull updates when Frappe releases new versions
 - **Example**:
   ```bash
