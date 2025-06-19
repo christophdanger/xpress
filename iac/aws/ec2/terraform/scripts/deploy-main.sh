@@ -1,13 +1,28 @@
 #!/bin/bash
 
-# Script to deploy the Terraform state backend infrastructure for AWS EC2 deployment
-# This script implements User Story 1.1: Secure Terraform State Backend
+# Script to deploy the main AWS EC2 infrastructure
+# This script implements the main infrastructure AFTER bootstrap is complete
 # Part of: iac/aws/ec2/terraform - AWS EC2-based ERPNext staging environment
 
 set -e
 
-echo "🚀 Deploying AWS EC2 Terraform State Backend Infrastructure"
-echo "=========================================================="
+echo "🚀 Deploying AWS EC2 Main Infrastructure"
+echo "========================================"
+
+# Check if bootstrap has been completed
+if [ ! -f "backend-config.tf" ]; then
+    echo "❌ Backend configuration not found!"
+    echo ""
+    echo "You need to run the bootstrap process first:"
+    echo "1. cd bootstrap/"
+    echo "2. ./deploy-bootstrap.sh"
+    echo "3. cd .. (back to this directory)"
+    echo "4. Run this script again"
+    echo ""
+    exit 1
+fi
+
+echo "✅ Backend configuration found"
 
 # Check if AWS CLI is configured
 if ! aws sts get-caller-identity &> /dev/null; then
@@ -29,8 +44,8 @@ cd "$(dirname "$0")"
 
 echo "📁 Working directory: $(pwd)"
 
-# Initialize Terraform
-echo "📦 Initializing Terraform..."
+# Initialize Terraform with remote backend
+echo "📦 Initializing Terraform with remote backend..."
 terraform init
 
 # Validate configuration
@@ -48,47 +63,25 @@ echo ""
 
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     # Apply the configuration
-    echo "🛠️  Applying Terraform configuration..."
+    echo "🛠️  Applying main infrastructure..."
     terraform apply tfplan
     
     # Get outputs
     echo ""
     echo "📊 Deployment Results:"
     echo "====================="
-    BUCKET_NAME=$(terraform output -raw terraform_state_bucket_name)
-    TABLE_NAME=$(terraform output -raw terraform_state_lock_table_name)
     BACKUP_BUCKET=$(terraform output -raw app_backups_bucket_name)
     
-    echo "S3 State Bucket: $BUCKET_NAME"
-    echo "DynamoDB Lock Table: $TABLE_NAME"
     echo "Backup Bucket: $BACKUP_BUCKET"
     echo ""
     
-    # Create the backend configuration file
-    echo "📝 Creating backend configuration file..."
-    cat > backend-config.tf << EOF
-# Backend configuration for remote state
-# Generated automatically by deploy-backend.sh
-
-terraform {
-  backend "s3" {
-    bucket         = "$BUCKET_NAME"
-    key            = "terraform.tfstate"
-    region         = "$AWS_REGION"
-    dynamodb_table = "$TABLE_NAME"
-    encrypt        = true
-  }
-}
-EOF
-    
-    echo "✅ Backend configuration created: backend-config.tf"
+    echo "✅ Main infrastructure deployed successfully!"
     echo ""
-    echo "🎉 State backend infrastructure deployed successfully!"
+    echo "🎉 User Story 1.1 Complete!"
     echo ""
     echo "📋 Next Steps:"
-    echo "1. Run 'terraform init -migrate-state' to migrate state to remote backend"
-    echo "2. Commit the backend-config.tf file to version control"
-    echo "3. Remove the local terraform.tfstate file after successful migration"
+    echo "1. Proceed with User Story 1.2: Foundational Networking (VPC)"
+    echo "2. Then User Story 1.3: Self-Contained EC2 Instance"
     echo ""
     
     # Clean up plan file

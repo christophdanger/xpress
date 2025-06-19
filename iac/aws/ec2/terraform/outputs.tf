@@ -1,35 +1,58 @@
-# Outputs for the Terraform state backend
-output "terraform_state_bucket_name" {
-  description = "Name of the S3 bucket for Terraform state"
-  value       = aws_s3_bucket.terraform_state.bucket
+# Outputs for User Stories 1.1 & 1.2
+# Networking infrastructure outputs only
+
+# ===========================================
+# NETWORKING OUTPUTS (User Story 1.2)
+# ===========================================
+output "vpc_id" {
+  description = "ID of the VPC"
+  value       = aws_vpc.main.id
 }
 
-output "terraform_state_bucket_arn" {
-  description = "ARN of the S3 bucket for Terraform state"
-  value       = aws_s3_bucket.terraform_state.arn
+output "vpc_cidr" {
+  description = "CIDR block of the VPC"
+  value       = aws_vpc.main.cidr_block
 }
 
-output "terraform_state_lock_table_name" {
-  description = "Name of the DynamoDB table for Terraform state locking"
-  value       = aws_dynamodb_table.terraform_state_lock.name
+output "public_subnet_id" {
+  description = "ID of the public subnet"
+  value       = aws_subnet.public.id
 }
 
-output "terraform_state_lock_table_arn" {
-  description = "ARN of the DynamoDB table for Terraform state locking"
-  value       = aws_dynamodb_table.terraform_state_lock.arn
+output "public_subnet_cidr" {
+  description = "CIDR block of the public subnet"
+  value       = aws_subnet.public.cidr_block
 }
 
-output "app_backups_bucket_name" {
-  description = "Name of the S3 bucket for application backups"
-  value       = aws_s3_bucket.app_backups.bucket
-}
-
-output "app_backups_bucket_arn" {
-  description = "ARN of the S3 bucket for application backups"
-  value       = aws_s3_bucket.app_backups.arn
+output "internet_gateway_id" {
+  description = "ID of the Internet Gateway"
+  value       = aws_internet_gateway.main.id
 }
 
 output "aws_region" {
   description = "AWS region where resources are deployed"
   value       = var.aws_region
+}
+
+# ===========================================
+# COMPUTE OUTPUTS (User Story 1.3)
+# ===========================================
+output "instance_id" {
+  description = "ID of the ERPNext EC2 instance"
+  value       = aws_instance.erpnext.id
+}
+
+output "instance_public_ip" {
+  description = "Public IP address of the ERPNext instance"
+  value       = aws_instance.erpnext.public_ip
+}
+
+output "instance_public_dns" {
+  description = "Public DNS name of the ERPNext instance"
+  value       = aws_instance.erpnext.public_dns
+}
+
+output "security_group_id" {
+  description = "ID of the ERPNext security group"
+  value       = aws_security_group.erpnext_sg.id
 }

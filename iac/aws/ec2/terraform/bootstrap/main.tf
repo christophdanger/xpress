@@ -1,4 +1,6 @@
-# Terraform configuration for ERPNext staging environment on AWS EC2
+# Simplified Terraform backend infrastructure
+# Creates only S3 bucket for state storage (no DynamoDB due to permission limitations)
+
 terraform {
   required_version = ">= 1.0"
   required_providers {
@@ -23,11 +25,7 @@ provider "aws" {
       Environment = "staging"
       ManagedBy   = "terraform"
       Owner       = "devops"
+      Purpose     = "terraform-backend"
     }
   }
-}
-
-# Generate a random suffix for unique resource naming
-resource "random_id" "suffix" {
-  byte_length = 4
 }
