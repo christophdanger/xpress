@@ -2,12 +2,14 @@
 
 ## Overview
 
-Epic 2 (Automated Deployment & Configuration) has been successfully implemented with comprehensive GitHub Actions workflows that provide automated ERPNext deployment, SSL configuration, and operational management for the AWS EC2 infrastructure.
+Epic 2 (Automated Deployment & Configuration) has been successfully implemented with comprehensive GitHub Actions workflow templates that provide automated ERPNext deployment, SSL configuration, and operational management for the AWS EC2 infrastructure. 
+
+**Important**: All workflows have been converted to templates located in `/templates/github-actions/` to support the repository's role as a reference implementation library.
 
 ## Completed User Stories
 
 ### ✅ User Story 2.1: Automated Application Deployment
-- **Implementation**: `.github/workflows/epic2-deploy-erpnext.yml`
+- **Template**: `/templates/github-actions/deploy-erpnext.yml.template`
 - **Triggers**: Push to `develop` branch or manual dispatch
 - **Features**:
   - Automated ERPNext deployment using frappe_docker
@@ -17,7 +19,7 @@ Epic 2 (Automated Deployment & Configuration) has been successfully implemented 
   - Post-deployment verification
 
 ### ✅ User Story 2.2: Automated SSL/TLS Configuration
-- **Implementation**: `.github/workflows/epic2-ssl-configuration.yml`
+- **Template**: `/templates/github-actions/ssl-configuration.yml.template`
 - **Triggers**: Manual dispatch with site configuration
 - **Features**:
   - Let's Encrypt certificate provisioning
@@ -27,7 +29,7 @@ Epic 2 (Automated Deployment & Configuration) has been successfully implemented 
   - HTTPS connectivity testing
 
 ### ✅ User Story 3.1: Automated Backups to S3 (Epic 3)
-- **Implementation**: `.github/workflows/epic3-automated-backups.yml`
+- **Template**: `/templates/github-actions/automated-backups.yml.template`
 - **Triggers**: Daily schedule (2:00 AM UTC) or manual dispatch
 - **Features**:
   - Multiple backup types (full, database-only, files-only)
@@ -84,7 +86,7 @@ Epic 2 (Automated Deployment & Configuration) has been successfully implemented 
 
 ## Workflow Capabilities
 
-### Deployment Workflow (`epic2-deploy-erpnext.yml`)
+### Deployment Workflow Template (`deploy-erpnext.yml.template`)
 ```yaml
 # Key features:
 - Automatic frappe_docker repository management
@@ -95,7 +97,7 @@ Epic 2 (Automated Deployment & Configuration) has been successfully implemented 
 - Health checks and verification
 ```
 
-### SSL Configuration Workflow (`epic2-ssl-configuration.yml`)
+### SSL Configuration Workflow Template (`ssl-configuration.yml.template`)
 ```yaml
 # Key features:
 - DNS validation before certificate requests
@@ -105,7 +107,7 @@ Epic 2 (Automated Deployment & Configuration) has been successfully implemented 
 - HTTPS connectivity verification
 ```
 
-### Backup Workflow (`epic3-automated-backups.yml`)
+### Backup Workflow Template (`automated-backups.yml.template`)
 ```yaml
 # Key features:
 - Multiple backup strategies

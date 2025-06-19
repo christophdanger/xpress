@@ -1,37 +1,42 @@
-# Epic 2: Automated Deployment & Configuration
+# GitHub Actions Workflow Templates
 
 ## Overview
 
-Epic 2 implements automated deployment and configuration workflows for ERPNext on AWS EC2 infrastructure. This epic builds upon the infrastructure established in Epic 1 and provides standardized, repeatable deployment processes with comprehensive monitoring and disaster recovery capabilities.
+This directory contains templates for GitHub Actions workflows that implement automated deployment and configuration for ERPNext on AWS EC2 infrastructure. These templates are designed to be copied and customized in your own projects, as this repository serves as a reference implementation library.
 
-## User Stories Implemented
+**Note**: The workflows in this repository have been moved to `/templates/github-actions/` as `.template` files. This ensures they don't run automatically in this reference repository but can be easily copied and adapted for your own projects.
+
+## Available Workflow Templates
+
+All workflow templates are located in `/templates/github-actions/` and include:
 
 ### User Story 2.1: Automated Application Deployment
-- **Workflow**: `epic2-deploy-erpnext.yml`
-- **Trigger**: Push to `develop` branch or manual trigger
+- **Template**: `deploy-erpnext.yml.template`
 - **Purpose**: Automatically deploy ERPNext application using Docker Compose with frappe_docker
 
 ### User Story 2.2: Automated SSL/TLS Configuration  
-- **Workflow**: `epic2-ssl-configuration.yml`
-- **Trigger**: Manual trigger
+- **Template**: `ssl-configuration.yml.template`
 - **Purpose**: Configure SSL/TLS certificates using Let's Encrypt and Traefik
 
 ### User Story 3.1: Automated Backups to S3
-- **Workflow**: `epic3-automated-backups.yml`
-- **Trigger**: Daily schedule (2:00 AM UTC) or manual trigger
+- **Template**: `automated-backups.yml.template`
 - **Purpose**: Create automated backups of ERPNext data and store in S3
 
-## Additional Workflows
-
 ### Infrastructure Monitoring & Maintenance
-- **Workflow**: `infrastructure-monitoring.yml`
-- **Trigger**: Every 6 hours or manual trigger
+- **Template**: `infrastructure-monitoring.yml.template`
 - **Purpose**: Monitor system health, SSL status, backup status, and security
 
 ### Disaster Recovery & Restore
-- **Workflow**: `disaster-recovery.yml`
-- **Trigger**: Manual trigger (requires confirmation)
+- **Template**: `disaster-recovery.yml.template`
 - **Purpose**: Restore ERPNext from S3 backups with various restore options
+
+## How to Use These Templates
+
+1. **Copy templates to your project**: Copy the desired `.template` files from `/templates/github-actions/` to your project's `.github/workflows/` directory
+2. **Remove .template extension**: Rename files to remove the `.template` suffix (e.g., `deploy-erpnext.yml`)
+3. **Customize for your environment**: Update repository references, secret names, and configuration values
+4. **Configure GitHub Secrets**: Set up the required secrets in your GitHub repository settings
+5. **Test workflows**: Run workflows manually first to ensure they work in your environment
 
 ## Architecture Patterns
 
@@ -55,9 +60,9 @@ The deployment follows the frappe_docker single-server pattern with:
 
 ## Workflow Details
 
-### 1. Epic 2 - Automated ERPNext Deployment
+### 1. Automated ERPNext Deployment
 
-**File**: `.github/workflows/epic2-deploy-erpnext.yml`
+**Template**: `/templates/github-actions/deploy-erpnext.yml.template`
 
 **Features**:
 - Clones/updates frappe_docker repository
@@ -84,9 +89,9 @@ docker compose --project-name erpnext \
 - `DB_PASSWORD`: Database password
 - `ADMIN_PASSWORD`: ERPNext admin password
 
-### 2. Epic 2.2 - SSL/TLS Configuration
+### 2. SSL/TLS Configuration
 
-**File**: `.github/workflows/epic2-ssl-configuration.yml`
+**Template**: `/templates/github-actions/ssl-configuration.yml.template`
 
 **Features**:
 - Validates DNS configuration
@@ -100,9 +105,9 @@ docker compose --project-name erpnext \
 - Ports 80 and 443 must be accessible
 - Let's Encrypt rate limits apply
 
-### 3. Epic 3 - Automated Backups to S3
+### 3. Automated Backups to S3
 
-**File**: `.github/workflows/epic3-automated-backups.yml`
+**Template**: `/templates/github-actions/automated-backups.yml.template`
 
 **Features**:
 - Multiple backup types (full, database-only, files-only)
@@ -122,7 +127,7 @@ S3 Bucket:
 
 ### 4. Infrastructure Monitoring
 
-**File**: `.github/workflows/infrastructure-monitoring.yml`
+**Template**: `/templates/github-actions/infrastructure-monitoring.yml.template`
 
 **Monitoring Components**:
 - **System Health**: CPU, memory, disk usage, container status
@@ -138,7 +143,7 @@ S3 Bucket:
 
 ### 5. Disaster Recovery & Restore
 
-**File**: `.github/workflows/disaster-recovery.yml`
+**Template**: `/templates/github-actions/disaster-recovery.yml.template`
 
 **Restore Types**:
 - `full-restore`: Complete restoration of database and files
