@@ -93,12 +93,15 @@ Host Machine:
 ├── frappe_docker/                     # Cloned frappe_docker repo
 │   ├── .devcontainer/                # Dev container configuration
 │   ├── development/                  # 🔑 MOUNTED into container
-│   │   └── frappe-bench/            # Created by bench init
+│   │   └── frappe-bench/            # ⚠️ Created by 'bench init' (don't create manually)
 │   │       └── apps/
-│   │           └── my_custom_app/   # ✅ Your app with git repo
+│   │           ├── frappe/          # Standard frappe framework
+│   │           ├── erpnext/         # Standard erpnext app
+│   │           └── my_custom_app/   # ✅ Your app with its own git repo
 │   ├── compose.yaml                 # Production compose file
 │   └── images/                      # For building custom images
 ├── deployment-config/               # xpress templates and config
+│   └── .git/                       # Main deployment repository
 └── README.md
 ```
 
@@ -115,16 +118,14 @@ Host Machine:
 mkdir -p ~/projects/my-erpnext-project
 cd ~/projects/my-erpnext-project
 
-# Create subdirectories
-mkdir -p frappe_docker
+# Create deployment config directory (this will be your main git repository)
 mkdir -p deployment-config
-mkdir -p custom-apps
 ```
 
-### Step 2: Set Up Frappe Docker
+### Step 2: Set Up Frappe Docker (Official Repository)
 
 ```bash
-# Clone frappe_docker for development
+# Clone the OFFICIAL frappe_docker repository (don't fork it)
 cd ~/projects/my-erpnext-project
 git clone https://github.com/frappe/frappe_docker.git frappe_docker/
 cd frappe_docker
@@ -133,9 +134,12 @@ cd frappe_docker
 cp -R devcontainer-example .devcontainer
 cp -R development/vscode-example development/.vscode
 
-# Create persistent development directories
-mkdir -p development/frappe-bench
-mkdir -p development/custom-apps
+# Note: development/frappe-bench will be created when we run 'bench init'
+# Don't create it manually as it causes conflicts
+
+# Keep this as the official repo so you can pull updates:
+# git pull origin main  # (when Frappe releases updates)
+```
 ```
 
 ### Step 3: Copy xpress Templates
@@ -187,9 +191,17 @@ bench set-config -g redis_socketio redis://redis-queue:6379
 # Remove redis from Procfile (using containers instead)
 sed -i '/redis/d' ./Procfile
 
-# Create your development site
+# Create your development site (try this first)
 bench new-site --no-mariadb-socket development.localhost
 # Enter password: 123 (mariadb root password)
+
+# If you get database errors, try this troubleshooting sequence:
+# 1. Drop the site and database
+# bench drop-site development.localhost --force
+# 2. Connect to MariaDB and drop the database manually
+# mysql -h mariadb -u root -p123 -e "DROP DATABASE IF EXISTS \`development.localhost\`;"
+# 3. Recreate the site
+# bench new-site --no-mariadb-socket development.localhost
 
 # Enable developer mode
 bench --site development.localhost set-config developer_mode 1
@@ -200,7 +212,44 @@ bench get-app --branch version-14 erpnext
 bench --site development.localhost install-app erpnext
 ```
 
-### Step 6: Create Your Custom App
+### Step 6: Understanding Git Repository Structure
+
+**Important**: You'll be working with multiple git repositories. Here's how they relate:
+
+### Repository Structure:
+```
+~/projects/my-erpnext-project/
+├── frappe_docker/                    # ✅ Official Frappe repo (don't modify)
+│   └── development/                  # Mounted into container
+│       └── frappe-bench/             # Created by 'bench init'
+│           └── apps/
+│               ├── frappe/           # Official Frappe (from bench get-app)
+│               ├── erpnext/          # Official ERPNext (from bench get-app)
+│               └── my_custom_app/    # ✅ YOUR app with its own git repo
+└── deployment-config/               # ✅ Your deployment configuration repo
+    ├── .github/workflows/
+    ├── iac/
+    └── .git/
+```
+
+#### Git Repository #1: Your Custom App
+- **Location**: Inside the dev container at `/workspace/development/frappe-bench/apps/my_custom_app/`
+- **On host**: `~/projects/my-erpnext-project/frappe_docker/development/frappe-bench/apps/my_custom_app/`
+- **Purpose**: Contains ONLY your custom Frappe/ERPNext application code
+- **Repository**: `https://github.com/your-username/my-custom-app.git`
+- **Important**: This directory is MOUNTED, so git operations work from inside the container
+
+#### Git Repository #2: Your Deployment Configuration  
+- **Location**: `~/projects/my-erpnext-project/deployment-config/`
+- **Purpose**: Contains infrastructure code, workflows, and deployment configuration
+- **Repository**: `https://github.com/your-username/my-erpnext-deployment.git`
+
+#### NOT a Git Repository: frappe_docker
+- **Location**: `~/projects/my-erpnext-project/frappe_docker/`
+- **Purpose**: Official Frappe Docker setup - keep it clean, pull updates from Frappe
+- **Don't**: Make it your own repository or modify the core files
+
+### Step 7: Create Your Custom App and Set Up Git
 
 ```bash
 # Still inside dev container
@@ -213,18 +262,44 @@ bench new-app my_custom_app
 # Install the app on your site
 bench --site development.localhost install-app my_custom_app
 
-# Set up git repository for your custom app
+# Set up git repository for your custom app (this happens INSIDE the dev container)
 cd apps/my_custom_app
+
+# Configure git inside the container
+git config --global user.email "your-email@example.com"
+git config --global user.name "Your Name"
+
+# Initialize git repository for YOUR custom app only
 git init
 git add .
 git commit -m "Initial custom app setup"
 
-# Connect to your GitHub repository
+# Create a NEW repository on GitHub first: https://github.com/your-username/my-custom-app
+# Then connect it (this pushes from inside the container to GitHub):
 git remote add origin https://github.com/your-username/my-custom-app.git
 git push -u origin main
 ```
 
-### Step 7: Daily Development Workflow
+### Step 8: Set Up Your Deployment Configuration Repository
+
+```bash
+# Exit the dev container (close VS Code dev container mode)
+# Open a regular terminal on your host machine
+
+cd ~/projects/my-erpnext-project/deployment-config
+
+# Initialize as git repository
+git init
+git add .
+git commit -m "Initial deployment configuration"
+
+# Create a NEW repository on GitHub: https://github.com/your-username/my-erpnext-deployment
+# Then connect it:
+git remote add origin https://github.com/your-username/my-erpnext-deployment.git
+git push -u origin main
+```
+
+### Step 9: Daily Development Workflow
 
 ```bash
 # Start your development day:
@@ -240,12 +315,19 @@ bench start
 
 # Make changes to your custom app:
 # Edit files in: /workspace/development/frappe-bench/apps/my_custom_app/
+# Examples:
+# - Add new DocTypes in my_custom_app/my_custom_app/doctype/
+# - Create custom scripts in my_custom_app/my_custom_app/public/js/
+# - Add custom reports, etc.
 
-# Commit changes:
+# Commit changes to your CUSTOM APP repository (from inside the dev container):
 cd /workspace/development/frappe-bench/apps/my_custom_app
 git add .
 git commit -m "Add new feature"
-git push
+git push  # This pushes from container to GitHub
+
+# Note: Because development/ is mounted, this git repository persists
+# You're working inside the container but the .git folder is on your host machine
 ```
 
 ---
@@ -306,18 +388,19 @@ terraform state list
 
 ## GitHub Actions Configuration
 
-### Step 1: Create Your Deployment Repository
+### Step 1: Verify Your Deployment Repository
 
 ```bash
-# Create a new repository for your deployment configuration
+# Make sure you're in your deployment configuration repository
 cd ~/projects/my-erpnext-project/deployment-config
-git init
-git add .
-git commit -m "Initial deployment configuration"
 
-# Push to your GitHub repository
-git remote add origin https://github.com/your-username/my-erpnext-deployment.git
-git push -u origin main
+# Verify the structure
+ls -la
+# Should show: .github/, iac/, .git/, README.md
+
+# Check git status
+git status
+# Should show it's a clean git repository
 ```
 
 ### Step 2: Configure GitHub Secrets
@@ -728,3 +811,64 @@ After successful testing:
 7. **Performance Optimization**: Monitor and optimize resource usage
 
 This completes your comprehensive testing of the xpress ERPNext deployment workflow. You now have a fully functional development-to-production pipeline for ERPNext deployment on AWS.
+
+## Understanding the Two-Repository Workflow
+
+**Key Insight**: You work with the **official frappe_docker repository** but create **your own custom app repository** inside it.
+
+### Repository 1: Your Custom App Repository (Inside Dev Container)
+- **What**: ONLY your custom Frappe/ERPNext application code
+- **Where**: Lives inside the mounted `development/` directory
+- **How it works**: 
+  - You develop inside the dev container
+  - The directory is mounted, so git operations from inside the container affect the host
+  - You commit and push from inside the container to your GitHub repository
+- **When to commit**: When you add features, fix bugs, or make changes to your custom app
+- **Example**: 
+  ```bash
+  # Inside dev container:
+  cd /workspace/development/frappe-bench/apps/my_custom_app
+  git add .
+  git commit -m "Add new Customer Portal feature"
+  git push  # Goes to YOUR GitHub repo
+  ```
+
+### Repository 2: Deployment Configuration Repository (On Host)
+- **What**: Infrastructure code, GitHub Actions workflows, deployment configuration  
+- **Where**: `~/projects/my-erpnext-project/deployment-config/`
+- **How it works**: Regular git repository on your host machine
+- **When to commit**: When you change infrastructure, workflows, or deployment settings
+- **Example**:
+  ```bash
+  # On host machine:
+  cd ~/projects/my-erpnext-project/deployment-config
+  git add .
+  git commit -m "Update SSL certificate configuration"
+  git push  # Goes to your deployment config GitHub repo
+  ```
+
+### NOT Your Repository: frappe_docker (Official)
+- **What**: Official Frappe Docker setup and configuration
+- **Where**: `~/projects/my-erpnext-project/frappe_docker/`
+- **How it works**: Keep this as the official Frappe repository
+- **Why**: So you can pull updates when Frappe releases new versions
+- **Example**:
+  ```bash
+  # Occasionally update to latest Frappe Docker:
+  cd ~/projects/my-erpnext-project/frappe_docker
+  git pull origin main
+  ```
+
+### The Magic: Mounted Directories
+
+The key to understanding this is that the `development/` directory is **mounted** into the container:
+
+```
+Host Machine Path:
+~/projects/my-erpnext-project/frappe_docker/development/frappe-bench/apps/my_custom_app/
+                    ↕ (mounted as)
+Container Path:  
+/workspace/development/frappe-bench/apps/my_custom_app/
+```
+
+So when you work inside the container at `/workspace/development/...`, you're actually working with files on your host machine. That's why git repositories work from inside the container!
