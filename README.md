@@ -25,7 +25,7 @@ xpress/
 
 ## Infrastructure Deployments
 
-### ✅ AWS EC2 - Staging Environment (Available)
+### AWS EC2 - Staging Environment
 A cost-effective, single-instance deployment perfect for development and small-scale production.
 
 **Quick Start**:
@@ -39,11 +39,11 @@ cd iac/aws/ec2/terraform/
 - Automated SSL certificates with Let's Encrypt
 - S3 backups with lifecycle policies
 - Systems Manager access (no SSH required)
-- Cost: < $5/month
+- Cost: < $20/month
 
 **Documentation**: [AWS EC2 Guide](iac/aws/ec2/terraform/README.md)
 
-### 🔄 Additional Deployments (Planned)
+### Additional Deployments (Planned)
 - **AWS ECS**: Production-ready containers with managed services
 - **AWS EKS**: Enterprise Kubernetes with advanced features
 - **Azure VM**: Alternative single-instance deployment
@@ -252,23 +252,13 @@ Install the latest bench using pip:
 pip3 install frappe-bench
 ```
 
-## IaaS
+## Production Deployment
 
-### AWS
+Outlined in Frappe's official docs, there are several ways to deploy Frappe and ERPNext to a target environment. Xpress is set up to provide some starter scripts to make deployment simple and flexible.
 
-Recommended architecture:
+See the `deploy` folder for deployment scripts and instructions:
 
-* **VPC**: A Virtual Private Cloud to host all resources.
-* **EC2 Instances**: For running the application and MariaDB/Postgres database.
-* **RDS**: Managed relational database service for MariaDB/Postgres.
-* **S3**: For storing any static files or backups.
-* **IAM Roles**: Appropriately scoped roles for security.
-* **Security Groups**: For controlling inbound and outbound traffic.
-* **ECS (optional)**: For running and managing Docker containers for Frappe benchmarks if needed.
-
-### Azure
-
-### GCP
+* Single server Frappe, ERPNext, SSL (w/ Traefik) and local DB/redis hosting
 
 ## Contributing
 
