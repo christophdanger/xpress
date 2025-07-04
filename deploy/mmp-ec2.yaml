@@ -1,0 +1,61 @@
+# CFN/YAML
+
+# ---
+# Step 1: Create a Security Group
+Resources:
+  LaunchWizard3SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: launch-wizard-3
+      GroupDescription: launch-wizard-3 created 2025-07-04T02:08:19.704Z
+      VpcId: vpc-02600199f387a446e
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+# Step 2: Create an EC2 Instance
+Resources:
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-020cba7c55df1f615
+      InstanceType: t2.medium
+      KeyName: cm-macbook-pro
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            Encrypted: false
+            DeleteOnTermination: true
+            Iops: 3000
+            SnapshotId: snap-0bc1d350c2ac74766
+            VolumeSize: 30
+            VolumeType: gp3
+            Throughput: 125
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          GroupSet:
+            - !Ref LaunchWizard3SecurityGroup
+      CreditSpecification:
+        CPUCredits: standard
+      Tags:
+        - Key: Name
+          Value: mmp-01
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpPutResponseHopLimit: 2
+        HttpTokens: required
+      PrivateDNSNameOptions:
+        HostnameType: ip-name
+        EnableResourceNameDnsARecord: true
+        EnableResourceNameDnsAAAARecord: false
