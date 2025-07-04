@@ -23,34 +23,6 @@ xpress/
 └── README.md                   # This file
 ```
 
-## Infrastructure Deployments
-
-### AWS EC2 - Staging Environment
-A cost-effective, single-instance deployment perfect for development and small-scale production.
-
-**Quick Start**:
-```bash
-cd iac/aws/ec2/terraform/
-./deploy-backend.sh
-```
-
-**Features**:
-- Single EC2 instance with Docker Compose
-- Automated SSL certificates with Let's Encrypt
-- S3 backups with lifecycle policies
-- Systems Manager access (no SSH required)
-- Cost: < $20/month
-
-**Documentation**: [AWS EC2 Guide](iac/aws/ec2/terraform/README.md)
-
-### Additional Deployments (Planned)
-- **AWS ECS**: Production-ready containers with managed services
-- **AWS EKS**: Enterprise Kubernetes with advanced features
-- **Azure VM**: Alternative single-instance deployment
-- **GCP Compute**: Google Cloud single-instance deployment
-
-[View all deployment options](iac/README.md)
-
 ## Setup Development Environment
 
 You can follow the detailed guide here [Frappe Docker - Development](https://github.com/frappe/frappe_docker/blob/main/docs/development.md), but the following is a concise version to get up and running with a local development environment using Docker, VS Code, and Dev Containers:
@@ -259,6 +231,34 @@ Outlined in Frappe's official docs, there are several ways to deploy Frappe and 
 See the `deploy` folder for deployment scripts and instructions:
 
 * Single server Frappe, ERPNext, SSL (w/ Traefik) and local DB/redis hosting
+
+## Infrastructure Deployments
+
+### AWS EC2 - Staging Environment
+A cost-effective, single-instance deployment perfect for development and small-scale production.
+
+**Quick Start**:
+```bash
+cd iac/aws/ec2/terraform/
+./deploy-backend.sh
+```
+
+**Features**:
+- Single EC2 instance with Docker Compose
+- Automated SSL certificates with Let's Encrypt
+- S3 backups with lifecycle policies
+- Systems Manager access (no SSH required)
+- Cost: < $20/month
+
+**Documentation**: [AWS EC2 Guide](iac/aws/ec2/terraform/README.md)
+
+### Additional Deployments (Planned)
+- **AWS ECS**: Production-ready containers with managed services
+- **AWS EKS**: Enterprise Kubernetes with advanced features
+- **Azure VM**: Alternative single-instance deployment
+- **GCP Compute**: Google Cloud single-instance deployment
+
+[View all deployment options](iac/README.md)
 
 ## Contributing
 
