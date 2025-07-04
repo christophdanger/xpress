@@ -12,7 +12,7 @@ source "${SCRIPT_DIR}/config.sh"
 source "${SCRIPT_DIR}/modules/00_preflight_checks.sh"
 source "${SCRIPT_DIR}/modules/01_install_dependencies.sh"
 source "${SCRIPT_DIR}/modules/10_deploy_traefik.sh"
-source "${SCRIPT_-DIR}/modules/11_deploy_database.sh"
+source "${SCRIPT_DIR}/modules/11_deploy_database.sh"
 source "${SCRIPT_DIR}/modules/20_deploy_frappe.sh"
 
 # --- Main Execution ---
