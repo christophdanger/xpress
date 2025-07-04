@@ -127,9 +127,3 @@ When adding new deployment patterns:
 - [Product Requirements Document](../docs/aws/prd-deployment-aws-ec2-phase-1.md)
 - [AWS EC2 Implementation](aws/ec2/terraform/README.md)
 - [Project Overview](../README.md)
-
----
-
-**Maintained by**: DevOps Team  
-**Last Updated**: June 17, 2025  
-**Version**: 1.0.0
