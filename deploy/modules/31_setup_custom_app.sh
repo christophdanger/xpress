@@ -44,7 +44,8 @@ build_custom_app_image() {
   mkdir -p "${DOCKERFILE_DIR}"
   
   cat > "${DOCKERFILE_DIR}/Dockerfile.${BENCH1_NAME}" <<EOF
-FROM frappe/frappe-worker:v14
+FROM frappe/frappe-worker:${FRAPPE_VERSION}
+RUN install_app erpnext https://github.com/frappe/erpnext ${FRAPPE_VERSION#v}
 RUN install_app ${APP_NAME} ${APP_REPO}
 EOF
   
