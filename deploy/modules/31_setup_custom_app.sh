@@ -33,36 +33,61 @@ setup_custom_app() {
   fi
 }
 
-build_custom_app_image() {
+build_custom_app_images() {
   local APP_NAME="$1"
   local APP_REPO="$2"
   
-  echo "### Building custom Docker image with ${APP_NAME}..."
+  echo "### Building custom Docker images with ${APP_NAME}..."
   
-  # Create a custom Dockerfile in gitops directory
+  # Create directory for Dockerfiles
   local DOCKERFILE_DIR="${GITOPS_DIR}/custom_images"
   mkdir -p "${DOCKERFILE_DIR}"
   
-  cat > "${DOCKERFILE_DIR}/Dockerfile.${BENCH1_NAME}" <<EOF
-FROM frappe/frappe-worker:${FRAPPE_VERSION}
-RUN install_app erpnext https://github.com/frappe/erpnext ${FRAPPE_VERSION#v}
+  # 1. Create worker Dockerfile (for backend processes)
+  cat > "${DOCKERFILE_DIR}/Dockerfile.worker" <<EOF
+# Base worker image - handles Python backend processes
+FROM frappe/frappe-worker:${FRAPPE_BRANCH_VERSION}
+
+# Install ERPNext first (dependency)
+RUN install_app erpnext https://github.com/frappe/erpnext ${FRAPPE_BRANCH_VERSION#version-}
+
+# Install your custom app
 RUN install_app ${APP_NAME} ${APP_REPO}
 EOF
   
-  # Build the custom image
-  docker build -t custom-frappe-${BENCH1_NAME}:latest -f "${DOCKERFILE_DIR}/Dockerfile.${BENCH1_NAME}" .
+  # 2. Create nginx Dockerfile (for frontend assets)
+  cat > "${DOCKERFILE_DIR}/Dockerfile.nginx" <<EOF
+# Base nginx image - handles web serving and assets
+FROM frappe/frappe-nginx:${FRAPPE_BRANCH_VERSION}
+
+# Install ERPNext first (for frontend assets)
+RUN install_app erpnext https://github.com/frappe/erpnext ${FRAPPE_BRANCH_VERSION#version-}
+
+# Install your custom app's frontend assets
+RUN install_app ${APP_NAME} ${APP_REPO}
+EOF
   
-  # Create a custom docker-compose override file
+  # Build the worker image (using frappe_docker as context)
+  echo "Building custom worker image..."
+  docker build -t custom-frappe-worker-${BENCH1_NAME}:latest \
+    -f "${DOCKERFILE_DIR}/Dockerfile.worker" "${FRAPPE_DOCKER_DIR}"
+  
+  # Build the nginx image (using frappe_docker as context)
+  echo "Building custom nginx image..."
+  docker build -t custom-frappe-nginx-${BENCH1_NAME}:latest \
+    -f "${DOCKERFILE_DIR}/Dockerfile.nginx" "${FRAPPE_DOCKER_DIR}"
+  
+  # Create docker-compose override to use these images
   cat > "${GITOPS_DIR}/${BENCH1_NAME}-custom.yaml" <<EOF
 version: '3'
 services:
   backend:
-    image: custom-frappe-${BENCH1_NAME}:latest
+    image: custom-frappe-worker-${BENCH1_NAME}:latest
   frontend:
-    image: custom-frappe-${BENCH1_NAME}:latest
+    image: custom-frappe-nginx-${BENCH1_NAME}:latest
 EOF
 
-  echo "### Custom image built. Use ${GITOPS_DIR}/${BENCH1_NAME}-custom.yaml for deployment."
+  echo "### Custom images built for both backend and frontend services."
 }
 
 install_custom_app() {

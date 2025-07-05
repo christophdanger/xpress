@@ -5,7 +5,7 @@ export WORKDIR="/opt/frappe"
 export GITOPS_DIR="${WORKDIR}/gitops"
 export FRAPPE_DOCKER_DIR="${WORKDIR}/frappe_docker"
 export FRAPPE_DOCKER_REPO="https://github.com/christophdanger/devburner-frappe_docker.git"
-export FRAPPE_VERSION="v15"
+export FRAPPE_BRANCH_VERSION="version-15"
 
 # --- Traefik Configuration ---
 export TRAEFIK_DOMAIN="traefik.example.com"
