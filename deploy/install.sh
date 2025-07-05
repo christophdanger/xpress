@@ -22,6 +22,21 @@ main() {
   # For now, we only have one deployment type.
   # This will be expanded later.
   local DEPLOYMENT_TYPE="single_server"
+  local APP_MODE="runtime"  # Default to runtime mode
+
+  while [[ $# -gt 0 ]]; do
+    key="$1"
+    case $key in
+      --mode)
+        APP_MODE="$2"
+        shift 2
+        ;;
+      *)
+        # Unknown option
+        shift
+        ;;
+    esac
+  done
 
   case "$DEPLOYMENT_TYPE" in
     "single_server")
@@ -31,7 +46,7 @@ main() {
       deploy_traefik
       deploy_database
       deploy_frappe_bench
-      install_custom_app "mmp_core" "https://github.com/christophdanger/mmp_core" "${BENCH1_SITES[0]}"
+      setup_custom_app "mmp_core" "https://github.com/christophdanger/mmp_core" "${BENCH1_SITES[0]}"
       ;;
     *)
       echo "Error: Unknown deployment type."
