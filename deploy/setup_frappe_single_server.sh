@@ -10,12 +10,12 @@ WORKDIR="/opt/frappe"
 GITOPS_DIR="${WORKDIR}/gitops"
 FRAPPE_DOCKER_DIR="${WORKDIR}/frappe_docker"
 
-TRAEFIK_DOMAIN="traefik-erpnext.devburner.io"
-TRAEFIK_EMAIL="cmsmitty84+traefik-mmp@gmail.com"
+TRAEFIK_DOMAIN="traefik.example.com"
+TRAEFIK_EMAIL="traefik@example.com"
 TRAEFIK_PASSWORD="##################"
 MARIADB_PASSWORD="##################"
 BENCH1_NAME="erpnext-one"
-BENCH1_SITES=("erp.devburner.io")
+BENCH1_SITES=("erp.example.com")
 
 ########################################
 

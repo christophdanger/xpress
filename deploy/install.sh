@@ -14,6 +14,7 @@ source "${SCRIPT_DIR}/modules/01_install_dependencies.sh"
 source "${SCRIPT_DIR}/modules/10_deploy_traefik.sh"
 source "${SCRIPT_DIR}/modules/11_deploy_database.sh"
 source "${SCRIPT_DIR}/modules/20_deploy_frappe.sh"
+source "${SCRIPT_DIR}/modules/30_install_custom_app.sh"
 
 # --- Main Execution ---
 
@@ -30,6 +31,7 @@ main() {
       deploy_traefik
       deploy_database
       deploy_frappe_bench
+      install_custom_app "mmp_core" "https://github.com/christophdanger/mmp_core" "${BENCH1_SITES[0]}"
       ;;
     *)
       echo "Error: Unknown deployment type."
