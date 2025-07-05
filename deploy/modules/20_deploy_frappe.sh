@@ -33,7 +33,7 @@ deploy_frappe_bench() {
 
   for site in "${BENCH1_SITES[@]}"; do
     echo "Checking if site ${site} exists..."
-    if docker compose --project-name "${BENCH1_NAME}" exec backend bench --site all list-sites | grep -q "${site}"; then
+    if docker compose --project-name "${BENCH1_NAME}" exec backend bench --site "${site}" list-apps > /dev/null 2>&1; then
       echo "Site ${site} already exists. Skipping creation."
     else
       echo "Creating site: ${site}"
