@@ -32,12 +32,17 @@ deploy_frappe_bench() {
   docker compose --project-name "${BENCH1_NAME}" -f "$GITOPS_DIR/${BENCH1_NAME}.yaml" up -d
 
   for site in "${BENCH1_SITES[@]}"; do
-    echo "Creating site: ${site}"
-    docker compose --project-name "${BENCH1_NAME}" exec backend \
-      bench new-site --mariadb-user-host-login-scope=% \
-      --db-root-password "${MARIADB_PASSWORD}" \
-      --install-app erpnext --admin-password "${MARIADB_PASSWORD}" \
-      "${site}"
+    echo "Checking if site ${site} exists..."
+    if docker compose --project-name "${BENCH1_NAME}" exec backend bench --site all list-sites | grep -q "${site}"; then
+      echo "Site ${site} already exists. Skipping creation."
+    else
+      echo "Creating site: ${site}"
+      docker compose --project-name "${BENCH1_NAME}" exec backend \
+        bench new-site --mariadb-user-host-login-scope=% \
+        --db-root-password "${MARIADB_PASSWORD}" \
+        --install-app erpnext --admin-password "${MARIADB_PASSWORD}" \
+        "${site}"
+    fi
   done
   echo "### Frappe Bench Deployed."
 }
