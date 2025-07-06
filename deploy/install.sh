@@ -31,7 +31,7 @@ main() {
       deploy_traefik
       deploy_database
       deploy_frappe_bench
-      install_custom_app "mmp_core" "https://github.com/christophdanger/mmp_core" "${BENCH1_SITES[0]}"
+      # install_custom_app "mmp_core" "https://github.com/christophdanger/mmp_core" "${BENCH1_SITES[0]}"
       ;;
     *)
       echo "Error: Unknown deployment type."

@@ -17,6 +17,11 @@ deploy_frappe_bench() {
       echo "SITES=${SITES1}"
       echo "ROUTER=${BENCH1_NAME}"
       echo "BENCH_NETWORK=${BENCH1_NAME}"
+      # Add custom image references
+      echo "FRAPPE_WORKER_IMAGE=ghcr.io/christophdanger/mmp_core"
+      echo "FRAPPE_WORKER_VERSION=1.0.0"
+      echo "FRAPPE_NGINX_IMAGE=ghcr.io/christophdanger/mmp_core"
+      echo "FRAPPE_NGINX_VERSION=1.0.0"
     } >> "$BENCH1_ENV"
   fi
 
