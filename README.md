@@ -12,6 +12,7 @@ The current minimum system requirements/packages can be found here on [Frappe's 
 ```
 xpress/
 ├── docs/                       # Documentation and requirements
+    ├── ai/                     # AI generated, draft content
 │   └── aws/                    # AWS-specific documentation
 ├── iac/                        # Infrastructure as Code
 │   ├── aws/                    # Amazon Web Services

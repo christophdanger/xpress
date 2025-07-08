@@ -6,7 +6,7 @@ This guide provides a comprehensive approach to deploying custom Frappe applicat
 
 ## Architecture
 
-Our deployment strategy separates the build and deployment phases for better reliability and parallelization:
+Our deployment strategy separates the build and deployment phases:
 
 1. **Build Phase**: Create custom Docker image with all required apps
 2. **Deploy Phase**: Use Frappe's easy-install script with the custom image
@@ -46,7 +46,7 @@ git clone https://github.com/frappe/frappe_docker.git
 cd frappe_docker
 
 # Create base64 encoded apps.json
-export APPS_JSON_BASE64=$(base64 -w 0 apps.json)
+export APPS_JSON_BASE64=$(base64 -w 0 apps.json) ## not safe on MacOS, use the -i before input apps.json
 
 # Verify encoding (optional but recommended)
 echo "Encoded apps.json: $APPS_JSON_BASE64"
@@ -94,8 +94,8 @@ wget https://raw.githubusercontent.com/frappe/bench/develop/easy-install.py
 Ensure your domain points to your server's public IP:
 ```bash
 # Verify DNS resolution
-nslookup your-domain.com
-dig your-domain.com
+nslookup your-domain.com # or
+dig your-domain.com +short
 ```
 
 ### 2.3 Deploy Command
