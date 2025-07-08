@@ -24,15 +24,9 @@ xpress/
 └── README.md                   # This file
 ```
 
-## Setup Development Environment
+# Getting Started with Frappe Development
 
 You can follow the detailed guide here [Frappe Docker - Development](https://github.com/frappe/frappe_docker/blob/main/docs/development.md), but the following is a concise version to get up and running with a local development environment using Docker, VS Code, and Dev Containers:
-
-Here’s a revised, concise, and organized guide to getting started with Frappe development. Technical details are preserved, and essential points are highlighted for easy understanding.
-
----
-
-# Getting Started with Frappe Development
 
 ## Prerequisites
 
