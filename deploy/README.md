@@ -5,14 +5,17 @@ Deploy ERPNext locally on Ubuntu with the MMP Core app using Docker.
 ## Quick Start
 
 ```bash
-# Deploy with defaults (mmp-local, mmp.local, frappe/erpnext:latest)
-./frappe_local_deploy_streamlined.sh deploy
+# Deploy with defaults (v15 stable)
+./deploy_mmp_local.sh deploy
 
-# Custom deployment
-./frappe_local_deploy_streamlined.sh deploy my-project my-site.local admin@company.com
+# Deploy ERPNext 15 (stable)
+./deploy_mmp_local.sh deploy mmp-v15 mmp.local admin@mmp.local frappe/erpnext v15
 
-# With custom image (for MMP)
-./frappe_local_deploy_streamlined.sh deploy mmp-prod prod.local admin@prod.local devburner/mmp-erpnext latest
+# Deploy ERPNext 14 (stable) 
+./deploy_mmp_local.sh deploy mmp-v14 mmp.local admin@mmp.local frappe/erpnext v14
+
+# With custom MMP image
+./deploy_mmp_local.sh deploy mmp-prod prod.local admin@prod.local devburner/mmp-erpnext latest
 ```
 
 **Access:** `http://mmp.local:8080` (or your sitename)  
@@ -22,19 +25,22 @@ Deploy ERPNext locally on Ubuntu with the MMP Core app using Docker.
 
 ```bash
 # Deploy new instance
-./frappe_local_deploy_streamlined.sh deploy [project] [sitename] [email] [image] [tag]
+./deploy_mmp_local.sh deploy [project] [sitename] [email] [image] [tag]
 
 # Check status
-./frappe_local_deploy_streamlined.sh status [project]
+./deploy_mmp_local.sh status [project]
 
 # View logs
-./frappe_local_deploy_streamlined.sh logs [project] [service]
+./deploy_mmp_local.sh logs [project] [service]
 
 # Restart services
-./frappe_local_deploy_streamlined.sh restart [project]
+./deploy_mmp_local.sh restart [project]
 
 # Complete cleanup
-./frappe_local_deploy_streamlined.sh cleanup [project]
+./deploy_mmp_local.sh cleanup [project]
+
+# Docker cleanup
+./deploy_mmp_local.sh docker-cleanup
 ```
 
 ## What It Does
@@ -51,11 +57,16 @@ Deploy ERPNext locally on Ubuntu with the MMP Core app using Docker.
 - Project: `mmp-local`
 - Site: `mmp.local` 
 - Email: `admin@mmp.local`
-- Image: `frappe/erpnext:latest`
+- Image: `frappe/erpnext:v15` (stable)
 - Port: 8080
 
+**Version Options:**
+- `frappe/erpnext:latest` - v16.0.0-dev (development/cutting edge)
+- `frappe/erpnext:v15` - ERPNext 15 (stable, recommended)  
+- `frappe/erpnext:v14` - ERPNext 14 (stable)
+- `frappe/erpnext:v15.70.2` - Specific patch version
+
 **Custom Images:**
-- `frappe/erpnext:latest` - Standard ERPNext
 - `devburner/mmp-erpnext:latest` - Production MMP image
 - `frappe/frappe:latest` - Base Frappe only
 
@@ -67,7 +78,7 @@ Deploy ERPNext locally on Ubuntu with the MMP Core app using Docker.
 
 ## Files
 
-- `frappe_local_deploy_streamlined.sh` - Main deployment script
+- `deploy_mmp_local.sh` - Main deployment script
 - `mmp-ec2.yaml` - Production EC2 deployment config  
 - `production-deployment-guide.md` - Manual deployment guide
 - `archive/` - Previous script versions (reference only)

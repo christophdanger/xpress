@@ -11,7 +11,7 @@ DEFAULT_PROJECT="mmp-local"
 DEFAULT_SITENAME="mmp.local"
 DEFAULT_EMAIL="admin@mmp.local"
 DEFAULT_IMAGE="frappe/erpnext"
-DEFAULT_TAG="latest"
+DEFAULT_TAG="v15"
 
 # Colors
 RED='\033[0;31m'
@@ -165,6 +165,13 @@ logs() {
     fi
 }
 
+# Docker cleanup function
+docker_cleanup() {
+    log "Cleaning up all unused Docker resources..."
+    docker system prune -a --volumes -f
+    log "Docker cleanup completed"
+}
+
 # Help function
 show_help() {
     cat << EOF
@@ -176,21 +183,32 @@ USAGE:
     $0 status [project] 
     $0 restart [project]
     $0 logs [project] [service]
+    $0 docker-cleanup
 
 COMMANDS:
-    deploy    - Deploy new instance (default: mmp-local, mmp.local, admin@mmp.local, frappe/erpnext, latest)
-    cleanup   - Remove deployment and cleanup volumes
-    status    - Show container status
-    restart   - Restart all services
-    logs      - Follow logs (default service: backend)
+    deploy         - Deploy new instance (default: mmp-local, mmp.local, admin@mmp.local, frappe/erpnext, v15)
+    cleanup        - Remove deployment and cleanup volumes
+    status         - Show container status
+    restart        - Restart all services
+    logs           - Follow logs (default service: backend)
+    docker-cleanup - Remove all unused Docker resources
 
 EXAMPLES:
-    $0 deploy                                    # Deploy with defaults
+    $0 deploy                                    # Deploy with defaults (latest/dev)
     $0 deploy my-site my.local admin@my.local    # Custom site
-    $0 deploy mmp-prod prod.local admin@prod.local devburner/mmp-erpnext latest
+    $0 deploy mmp-v15 mmp.local admin@mmp.local frappe/erpnext v15    # ERPNext 15 (stable)
+    $0 deploy mmp-v14 mmp.local admin@mmp.local frappe/erpnext v14    # ERPNext 14 (stable)
+    $0 deploy mmp-prod prod.local admin@prod.local devburner/mmp-erpnext latest  # Custom MMP image
     $0 status mmp-local                          # Check status
     $0 logs mmp-local frontend                   # Follow frontend logs
     $0 cleanup mmp-local                         # Remove deployment
+    $0 docker-cleanup                            # Clean up all Docker resources
+
+VERSION TAGS:
+    latest     - v16.0.0-dev (development)
+    v15        - ERPNext 15 (stable)
+    v14        - ERPNext 14 (stable)
+    v15.70.2   - Specific patch version
 
 EOF
 }
@@ -211,6 +229,9 @@ case "${1:-deploy}" in
         ;;
     logs)
         logs "$2" "$3"
+        ;;
+    docker-cleanup)
+        docker_cleanup
         ;;
     help|--help|-h)
         show_help
