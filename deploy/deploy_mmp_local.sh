@@ -95,8 +95,50 @@ deploy() {
         fi
     fi
         
+    # Create secure files for deployment
+    local site_admin_pass=$(grep "SITE_ADMIN_PASS=" "/home/$USER/$project.env" | cut -d'=' -f2)
+    local db_password=$(grep "DB_PASSWORD=" "/home/$USER/$project.env" | cut -d'=' -f2)
+    
+    # Write connection info (no passwords)
+    cat > "/home/$USER/$project-connection-info.txt" << EOF
+# $project Connection Information
+# Generated: $(date)
+
+=== FRAPPE/ERPNEXT ===
+URL: http://$sitename:8080
+Admin User: Administrator
+Admin Password: [See $project-secrets.txt]
+
+=== DATABASE ===
+Host: ${project}-db-1
+Database: [Auto-generated name]
+User: root
+Password: [See $project-secrets.txt]
+
+=== USEFUL COMMANDS ===
+View secrets: $0 show-secrets $project
+Add Grafana: $0 add-grafana $project
+Container status: $0 status $project
+EOF
+    
+    # Write secrets to secure file
+    cat > "/home/$USER/$project-secrets.txt" << EOF
+# $project Deployment Secrets
+# Generated: $(date)
+# File permissions: $(ls -la "/home/$USER/$project-secrets.txt" 2>/dev/null | cut -d' ' -f1 || echo "600")
+
+SITE_ADMIN_PASSWORD=$site_admin_pass
+DATABASE_ROOT_PASSWORD=$db_password
+EOF
+    
+    # Set secure permissions
+    chmod 600 "/home/$USER/$project-secrets.txt"
+    chmod 644 "/home/$USER/$project-connection-info.txt"
+    
     log "Deployment completed. Access at: http://$sitename:8080"
-    log "Admin credentials in: /home/$USER/$project.env"
+    log "Connection details: ~/$project-connection-info.txt"
+    log "Secure credentials: ~/$project-secrets.txt"
+    log "Use '$0 show-secrets $project' to display passwords"
 }
 
 # Cleanup function
@@ -121,6 +163,7 @@ cleanup() {
         fi
         
         rm -f "/home/$USER/$project-compose.yml" "/home/$USER/$project.env"
+        rm -f "/home/$USER/$project-secrets.txt" "/home/$USER/$project-connection-info.txt"
         
         # Remove hosts entry if it exists
         if [[ -n "$sitename" && "$sitename" == *.local ]]; then
@@ -228,19 +271,70 @@ EOF
     # Start Grafana
     docker compose -p "$project-grafana" -f "/home/$USER/$project-grafana.yml" up -d
     
-    # Get database details for user
+    # Get database details and write to secure files
     local db_password=$(grep "DB_PASSWORD=" "/home/$USER/$project.env" | cut -d'=' -f2)
     local db_name=$(docker exec ${project}-db-1 mysql -u root -p$db_password -e "SHOW DATABASES;" | grep -v "information_schema\|mysql\|performance_schema\|sys\|Database")
+    local grafana_password="admin123"
+    
+    # Write secrets to secure file
+    cat > "/home/$USER/$project-secrets.txt" << EOF
+# $project Deployment Secrets
+# Generated: $(date)
+# File permissions: $(ls -la "/home/$USER/$project-secrets.txt" 2>/dev/null | cut -d' ' -f1 || echo "600")
+
+GRAFANA_ADMIN_PASSWORD=$grafana_password
+DATABASE_ROOT_PASSWORD=$db_password
+SITE_ADMIN_PASSWORD=$(grep "SITE_ADMIN_PASS=" "/home/$USER/$project.env" | cut -d'=' -f2)
+EOF
+    
+    # Write connection info (no passwords)
+    cat > "/home/$USER/$project-connection-info.txt" << EOF
+# $project Connection Information
+# Generated: $(date)
+
+=== GRAFANA ===
+URL: http://localhost:3000
+Admin User: admin
+Admin Password: [See $project-secrets.txt]
+
+=== DATABASE ===
+Host: ${project}-db-1
+Database: $db_name
+User: root
+Password: [See $project-secrets.txt]
+
+=== FRAPPE/ERPNEXT ===
+URL: http://mmp.local:8080
+Admin User: Administrator
+Admin Password: [See $project-secrets.txt]
+EOF
+    
+    # Set secure permissions
+    chmod 600 "/home/$USER/$project-secrets.txt"
+    chmod 644 "/home/$USER/$project-connection-info.txt"
     
     log "Grafana added successfully!"
     log "Access: http://localhost:3000"
-    log "Admin user: admin / admin123"
+    log "Admin user: admin"
     log ""
-    log "Database connection details:"
-    log "Host: db (or ${project}-db-1)"
-    log "Database: $db_name"
-    log "User: root"
-    log "Password: $db_password"
+    log "Connection details written to: ~/$project-connection-info.txt"
+    log "Secrets written to: ~/$project-secrets.txt (secure file)"
+    log "Use '$0 show-secrets $project' to display passwords"
+}
+
+# Show secrets function
+show_secrets() {
+    local project="${1:-$DEFAULT_PROJECT}"
+    
+    if [[ ! -f "/home/$USER/$project-secrets.txt" ]]; then
+        error "No secrets file found for $project. Deploy first with: $0 deploy"
+    fi
+    
+    log "Displaying secrets for $project:"
+    echo ""
+    cat "/home/$USER/$project-secrets.txt"
+    echo ""
+    log "Connection info: ~/$project-connection-info.txt"
 }
 
 # Help function
@@ -255,6 +349,7 @@ USAGE:
     $0 restart [project]
     $0 logs [project] [service]
     $0 add-grafana [project]
+    $0 show-secrets [project]
     $0 docker-cleanup
 
 COMMANDS:
@@ -264,6 +359,7 @@ COMMANDS:
     restart        - Restart all services
     logs           - Follow logs (default service: backend)
     add-grafana    - Add Grafana with database access to existing deployment
+    show-secrets   - Display passwords and secrets for deployment
     docker-cleanup - Remove all unused Docker resources
 
 EXAMPLES:
@@ -275,6 +371,7 @@ EXAMPLES:
     $0 status mmp-local                          # Check status
     $0 logs mmp-local frontend                   # Follow frontend logs
     $0 add-grafana mmp-local                     # Add Grafana to deployment
+    $0 show-secrets mmp-local                    # Display passwords
     $0 cleanup mmp-local                         # Remove deployment
     $0 docker-cleanup                            # Clean up all Docker resources
 
@@ -306,6 +403,9 @@ case "${1:-deploy}" in
         ;;
     add-grafana)
         add_grafana "$2"
+        ;;
+    show-secrets)
+        show_secrets "$2"
         ;;
     docker-cleanup)
         docker_cleanup
