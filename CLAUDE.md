@@ -8,7 +8,8 @@ Xpress is a deployment toolchain for Frappe Framework applications (like ERPNext
 
 ## Key Architecture Components
 
-### Deployment Scripts (`deploy/`)
+### Build and Deployment Scripts (`deploy/`)
+- **Docker build script**: `build_mmp_stack.sh` - Flexible Docker image building with smart defaults
 - **Main deployment script**: `deploy_mmp_local.sh` - Comprehensive local deployment with SSL support
 - **SSL integration**: Uses Traefik reverse proxy with self-signed certificates for local HTTPS
 - **Service management**: Supports ERPNext, Grafana monitoring, and complete lifecycle management
@@ -27,6 +28,27 @@ Xpress is a deployment toolchain for Frappe Framework applications (like ERPNext
 
 ## Common Commands
 
+### Docker Image Building
+```bash
+# Standard builds (most common)
+cd deploy/
+./build_mmp_stack.sh build                    # Frappe + ERPNext (default)
+./build_mmp_stack.sh build --push             # Build and push to registry
+./build_mmp_stack.sh build --tag stable --push
+
+# MMP developers
+./build_mmp_stack.sh build --mmp              # Frappe + ERPNext + MMP Core
+./build_mmp_stack.sh build --mmp --tag production --push
+
+# Custom apps
+./build_mmp_stack.sh build --app github.com/user/hrms:v15 --tag hrms-stack
+./build_mmp_stack.sh build --base-only --tag frappe-only
+
+# Advanced usage
+./build_mmp_stack.sh build --config ./my-apps.json --tag client-stack
+./build_mmp_stack.sh build --registry ghcr.io/username --push
+```
+
 ### Local Development Deployment
 ```bash
 # HTTP deployment (simple)
@@ -35,6 +57,9 @@ cd deploy/
 
 # HTTPS deployment (production-like)
 ./deploy_mmp_local.sh deploy --ssl
+
+# Deploy with custom image
+./deploy_mmp_local.sh deploy custom-stack custom.local admin@custom.local my-registry/my-image latest --ssl
 
 # Add monitoring
 ./deploy_mmp_local.sh add-grafana mmp-local
@@ -70,10 +95,17 @@ The project supports VSCode Dev Containers for Frappe development:
 - Dev container setup with MariaDB/PostgreSQL options
 - Bench-based development workflow with hot reloading
 
+### Docker Image Building
+- **Smart defaults**: Frappe + ERPNext by default (no MMP Core unless requested)
+- **Flexible configuration**: Support for custom apps, multiple registries, and config files
+- **Auto image naming**: `frappe-erpnext`, `mmp-erpnext`, `frappe-base` based on content
+- **End-to-end workflow**: Build → Push → Deploy in simple commands
+
 ### Custom App Integration
-- Builds custom Docker images with MMP Core app
-- Uses `apps.json` configuration for multi-app builds
-- Supports branch-specific builds for development and production
+- Dynamic `apps.json` generation based on command line flags
+- Support for GitHub shorthand (`user/repo:branch`) and full URLs
+- Branch-specific builds for development and production
+- Configuration file support for complex multi-app setups
 
 ## File Structure Patterns
 
@@ -118,10 +150,79 @@ curl -k -H "Host: mmp.local" https://YOUR_EC2_IP/
 curl -k -H "Host: grafana.mmp.local" https://YOUR_EC2_IP/
 ```
 
+## Build and Deploy Workflows
+
+### Standard Developer Workflow
+```bash
+# 1. One-time setup
+cd deploy/
+./build_mmp_stack.sh setup
+
+# 2. Build and deploy standard stack
+./build_mmp_stack.sh build --push
+./deploy_mmp_local.sh deploy --ssl
+
+# 3. Add monitoring
+./deploy_mmp_local.sh add-grafana mmp-local
+```
+
+### MMP Developer Workflow
+```bash
+# 1. Build MMP stack
+./build_mmp_stack.sh build --mmp --tag develop --push
+
+# 2. Deploy with MMP image
+./deploy_mmp_local.sh deploy mmp-dev mmp.local admin@mmp.local devburner/mmp-erpnext develop --ssl
+
+# 3. Test and iterate
+./deploy_mmp_local.sh show-secrets mmp-dev
+```
+
+### Custom App Development
+```bash
+# 1. Build with custom app
+./build_mmp_stack.sh build --app github.com/user/hrms:v15 --tag hrms-stack --push
+
+# 2. Deploy custom stack
+./deploy_mmp_local.sh deploy hrms-test hrms.local admin@hrms.local devburner/frappe-erpnext hrms-stack --ssl
+
+# 3. Verify deployment
+./deploy_mmp_local.sh status hrms-test
+```
+
+### Multi-App Enterprise Setup
+```bash
+# 1. Create apps configuration
+cat > custom-apps.json << EOF
+[
+  {
+    "url": "https://github.com/frappe/erpnext.git",
+    "branch": "version-15"
+  },
+  {
+    "url": "https://github.com/user/hrms.git",
+    "branch": "v15"
+  },
+  {
+    "url": "https://github.com/user/accounting.git",
+    "branch": "main"
+  }
+]
+EOF
+
+# 2. Build with config file
+./build_mmp_stack.sh build --config custom-apps.json --tag enterprise-v1 --push
+
+# 3. Deploy enterprise stack
+./deploy_mmp_local.sh deploy enterprise enterprise.local admin@enterprise.local devburner/frappe-erpnext enterprise-v1 --ssl
+```
+
 ## Important Notes
 
 - Always run commands from the appropriate directory (`deploy/` or `iac/aws/ec2/terraform/`)
+- Build script auto-downloads `frappe_docker` repository (gitignored)
 - SSL deployment automatically updates connection info files with HTTPS URLs
-- The `frappe_docker` directory is downloaded during deployment and gitignored
 - Terraform state is stored remotely in S3 with proper backend configuration
 - Use `--ssl` flag for production-like HTTPS deployment with Traefik reverse proxy
+- Default builds include Frappe + ERPNext only (no MMP Core unless `--mmp` flag used)
+- Image naming automatically adjusts based on apps included in build

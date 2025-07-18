@@ -7,6 +7,7 @@ xpress is a set of tooling to deliver, setup, and maintain infrastructure and co
 
 **Quick paths to get started:**
 - **Local development:** [Development setup](#getting-started-with-frappe-development) with VSCode containers
+- **Docker image building:** [Custom image builds](#docker-image-building) with `./build_mmp_stack.sh build`
 - **Local deployment:** [One-command deployment](#local-development-deployment) with `./deploy_mmp_local.sh deploy`
 - **Production infrastructure:** [AWS EC2 deployment](#aws-ec2---staging-environment) with Terraform
 
@@ -16,8 +17,10 @@ The current minimum system requirements/packages can be found here on [Frappe's 
 
 ```
 xpress/
-├── deploy/                     # Local deployment scripts
+├── deploy/                     # Build and deployment scripts
+│   ├── build_mmp_stack.sh      # Docker image building script
 │   ├── deploy_mmp_local.sh     # Main deployment script
+│   ├── ssl-options/            # SSL/HTTPS configuration files
 │   ├── production-deployment-guide.md
 │   └── README.md               # Deployment documentation
 ├── docs/                       # Documentation and requirements
@@ -203,6 +206,77 @@ To run containers outside VSCode:
 
 This structured guide should streamline your Frappe development setup while preserving essential details.
 
+## Docker Image Building
+
+Xpress provides a flexible Docker image building script that simplifies creating custom Frappe stacks. It features smart defaults with full flexibility when needed.
+
+### Quick Start
+
+```bash
+# Standard build (Frappe + ERPNext)
+cd deploy/
+./build_mmp_stack.sh build
+
+# Build and push to registry
+./build_mmp_stack.sh build --push
+
+# Build with SSL deployment
+./build_mmp_stack.sh build --push
+./deploy_mmp_local.sh deploy --ssl
+```
+
+### Build Options
+
+**Smart Defaults:**
+- **Default**: Frappe + ERPNext (what most developers need)
+- **MMP developers**: Add `--mmp` flag for MMP Core integration
+- **Base only**: Use `--base-only` for Frappe framework only
+
+**Examples:**
+```bash
+# Standard builds
+./build_mmp_stack.sh build                    # Frappe + ERPNext
+./build_mmp_stack.sh build --tag stable --push
+
+# MMP developers
+./build_mmp_stack.sh build --mmp              # Adds MMP Core
+./build_mmp_stack.sh build --mmp --tag production --push
+
+# Custom apps
+./build_mmp_stack.sh build --app github.com/user/hrms:v15 --tag hrms-stack
+./build_mmp_stack.sh build --app user/app1:main --app user/app2:develop
+
+# Advanced usage
+./build_mmp_stack.sh build --config ./custom-apps.json --tag client-stack
+./build_mmp_stack.sh build --registry ghcr.io/username --push
+```
+
+### End-to-End Workflow
+
+```bash
+# 1. One-time setup
+./build_mmp_stack.sh setup
+
+# 2. Build and deploy
+./build_mmp_stack.sh build --push
+./deploy_mmp_local.sh deploy --ssl
+
+# 3. Add monitoring
+./deploy_mmp_local.sh add-grafana mmp-local
+
+# 4. Test and iterate
+./deploy_mmp_local.sh show-secrets mmp-local
+```
+
+**Features:**
+- Smart defaults without over-engineering
+- Flexible app configuration via command line or JSON files
+- Automatic image naming based on content
+- Support for multiple registries (Docker Hub, GitHub Container Registry)
+- CI/CD ready with consistent command interface
+
+**[See full documentation](deploy/README.md)**
+
 ## Manual Install (referenced from Frappe's docs)
 To manually install frappe/erpnext, you can follow this this wiki for Linux and this wiki for MacOS. It gives an excellent explanation about the stack. You can also follow the steps mentioned below:
 
@@ -231,23 +305,32 @@ Xpress provides multiple deployment options from local development to production
 
 ### Local Development Deployment
 
-The fastest way to get ERPNext running locally with improved password handling:
+The fastest way to get ERPNext running locally with improved password handling and SSL support:
 
 ```bash
-# Quick start - deploys ERPNext v15 with better security practices
+# Quick start - deploys ERPNext v15 with HTTPS
 cd deploy/
-./deploy_mmp_local.sh deploy
+./deploy_mmp_local.sh deploy --ssl
 
-# Access at http://mmp.local:8080
+# Access at https://mmp.local
 # View credentials: ./deploy_mmp_local.sh show-secrets mmp-local
+```
+
+**Deploy with Custom Images:**
+```bash
+# Build and deploy in one workflow
+./build_mmp_stack.sh build --mmp --push
+./deploy_mmp_local.sh deploy mmp-custom mmp.local admin@mmp.local devburner/mmp-erpnext latest --ssl
 ```
 
 **Features:**
 - Improved password handling (no terminal exposure)
+- SSL/HTTPS support with Traefik reverse proxy
 - Automatic Docker and /etc/hosts setup
 - Grafana integration for monitoring
 - Complete lifecycle management
 - Built on official Frappe easy-install.py
+- Integration with custom Docker image builds
 
 **[See full documentation](deploy/README.md)**
 
