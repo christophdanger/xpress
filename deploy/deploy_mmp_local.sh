@@ -112,6 +112,14 @@ cleanup() {
         fi
         
         docker compose -p "$project" -f "/home/$USER/$project-compose.yml" down -v
+        
+        # Clean up Grafana if it exists
+        if [[ -f "/home/$USER/$project-grafana.yml" ]]; then
+            log "Removing Grafana..."
+            docker compose -p "$project-grafana" -f "/home/$USER/$project-grafana.yml" down -v
+            rm -f "/home/$USER/$project-grafana.yml"
+        fi
+        
         rm -f "/home/$USER/$project-compose.yml" "/home/$USER/$project.env"
         
         # Remove hosts entry if it exists
@@ -172,6 +180,69 @@ docker_cleanup() {
     log "Docker cleanup completed"
 }
 
+# Add Grafana to existing deployment
+add_grafana() {
+    local project="${1:-$DEFAULT_PROJECT}"
+    log "Adding Grafana to $project deployment"
+    
+    if [[ ! -f "/home/$USER/$project-compose.yml" ]]; then
+        error "No deployment found for $project. Deploy first with: $0 deploy"
+    fi
+    
+    # Check if Grafana is already added
+    if docker ps | grep -q "$project-grafana"; then
+        warn "Grafana already running for $project"
+        return
+    fi
+    
+    # Create Grafana compose file with project-specific settings
+    cat > "/home/$USER/$project-grafana.yml" << EOF
+services:
+  grafana:
+    image: grafana/grafana:latest
+    container_name: $project-grafana-1
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - grafana-config:/etc/grafana
+    networks:
+      - default
+
+volumes:
+  grafana-data:
+    name: ${project}_grafana-data
+  grafana-config:
+    name: ${project}_grafana-config
+
+networks:
+  default:
+    external: true
+    name: ${project}_default
+EOF
+    
+    # Start Grafana
+    docker compose -p "$project-grafana" -f "/home/$USER/$project-grafana.yml" up -d
+    
+    # Get database details for user
+    local db_password=$(grep "DB_PASSWORD=" "/home/$USER/$project.env" | cut -d'=' -f2)
+    local db_name=$(docker exec ${project}-db-1 mysql -u root -p$db_password -e "SHOW DATABASES;" | grep -v "information_schema\|mysql\|performance_schema\|sys\|Database")
+    
+    log "Grafana added successfully!"
+    log "Access: http://localhost:3000"
+    log "Admin user: admin / admin123"
+    log ""
+    log "Database connection details:"
+    log "Host: db (or ${project}-db-1)"
+    log "Database: $db_name"
+    log "User: root"
+    log "Password: $db_password"
+}
+
 # Help function
 show_help() {
     cat << EOF
@@ -183,6 +254,7 @@ USAGE:
     $0 status [project] 
     $0 restart [project]
     $0 logs [project] [service]
+    $0 add-grafana [project]
     $0 docker-cleanup
 
 COMMANDS:
@@ -191,6 +263,7 @@ COMMANDS:
     status         - Show container status
     restart        - Restart all services
     logs           - Follow logs (default service: backend)
+    add-grafana    - Add Grafana with database access to existing deployment
     docker-cleanup - Remove all unused Docker resources
 
 EXAMPLES:
@@ -201,6 +274,7 @@ EXAMPLES:
     $0 deploy mmp-prod prod.local admin@prod.local devburner/mmp-erpnext latest  # Custom MMP image
     $0 status mmp-local                          # Check status
     $0 logs mmp-local frontend                   # Follow frontend logs
+    $0 add-grafana mmp-local                     # Add Grafana to deployment
     $0 cleanup mmp-local                         # Remove deployment
     $0 docker-cleanup                            # Clean up all Docker resources
 
@@ -229,6 +303,9 @@ case "${1:-deploy}" in
         ;;
     logs)
         logs "$2" "$3"
+        ;;
+    add-grafana)
+        add_grafana "$2"
         ;;
     docker-cleanup)
         docker_cleanup
