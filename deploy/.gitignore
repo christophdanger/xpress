@@ -1,0 +1,11 @@
+# Deployment secrets and sensitive files
+*-secrets.txt
+*-connection-info.txt
+*.env
+*-compose.yml
+*-grafana.yml
+easy-install.log
+
+# Temporary files
+*.tmp
+*.log
