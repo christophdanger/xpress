@@ -275,8 +275,52 @@ add_grafana() {
         return
     fi
     
+    # Check if SSL is enabled
+    local ssl_enabled=false
+    if [[ -f "/home/$USER/$project-ssl-compose.yml" ]]; then
+        ssl_enabled=true
+    fi
+    
     # Create Grafana compose file with project-specific settings
-    cat > "/home/$USER/$project-grafana.yml" << EOF
+    if [[ "$ssl_enabled" == true ]]; then
+        # SSL-enabled Grafana
+        cat > "/home/$USER/$project-grafana.yml" << EOF
+services:
+  grafana:
+    image: grafana/grafana:latest
+    container_name: $project-grafana-1
+    restart: unless-stopped
+    expose:
+      - "3000"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana-websecure.rule=Host(\`grafana.mmp.local\`)"
+      - "traefik.http.routers.grafana-websecure.entrypoints=websecure"
+      - "traefik.http.routers.grafana-websecure.tls=true"
+      - "traefik.http.services.grafana-service.loadbalancer.server.port=3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - grafana-config:/etc/grafana
+    networks:
+      - default
+
+volumes:
+  grafana-data:
+    name: ${project}_grafana-data
+  grafana-config:
+    name: ${project}_grafana-config
+
+networks:
+  default:
+    external: true
+    name: ${project}_default
+EOF
+    else
+        # HTTP-only Grafana
+        cat > "/home/$USER/$project-grafana.yml" << EOF
 services:
   grafana:
     image: grafana/grafana:latest
@@ -304,6 +348,7 @@ networks:
     external: true
     name: ${project}_default
 EOF
+    fi
     
     # Start Grafana
     docker compose -p "$project-grafana" -f "/home/$USER/$project-grafana.yml" up -d
@@ -325,12 +370,19 @@ SITE_ADMIN_PASSWORD=$(grep "SITE_ADMIN_PASS=" "/home/$USER/$project.env" | cut -
 EOF
     
     # Write connection info (no passwords)
+    local grafana_url="http://localhost:3000"
+    local frappe_url="http://mmp.local:8080"
+    if [[ "$ssl_enabled" == true ]]; then
+        grafana_url="https://grafana.mmp.local"
+        frappe_url="https://mmp.local"
+    fi
+    
     cat > "/home/$USER/$project-connection-info.txt" << EOF
 # $project Connection Information
 # Generated: $(date)
 
 === GRAFANA ===
-URL: http://localhost:3000
+URL: $grafana_url
 Admin User: admin
 Admin Password: [See $project-secrets.txt]
 
@@ -341,7 +393,7 @@ User: root
 Password: [See $project-secrets.txt]
 
 === FRAPPE/ERPNEXT ===
-URL: http://mmp.local:8080
+URL: $frappe_url
 Admin User: Administrator
 Admin Password: [See $project-secrets.txt]
 EOF
@@ -351,7 +403,12 @@ EOF
     chmod 644 "/home/$USER/$project-connection-info.txt"
     
     log "Grafana added successfully!"
-    log "Access: http://localhost:3000"
+    if [[ "$ssl_enabled" == true ]]; then
+        log "Access: https://grafana.mmp.local"
+        log "Note: SSL-enabled Grafana via Traefik proxy"
+    else
+        log "Access: http://localhost:3000"
+    fi
     log "Admin user: admin"
     log ""
     log "Connection details written to: ~/$project-connection-info.txt"
