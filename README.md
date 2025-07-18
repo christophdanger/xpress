@@ -16,9 +16,6 @@ xpress/
 │   └── aws/                    # AWS-specific documentation
 ├── iac/                        # Infrastructure as Code
 │   ├── aws/                    # Amazon Web Services
-│   │   ├── ec2/                # EC2 single-instance deployment
-│   │   ├── ecs/                # ECS containerized deployment (planned)
-│   │   └── eks/                # EKS Kubernetes deployment (planned)
 │   ├── azure/                  # Microsoft Azure (planned)
 │   └── gcp/                    # Google Cloud Platform (planned)
 └── README.md                   # This file
@@ -127,7 +124,7 @@ Run the following commands to create a site:
 
 1. **Fetch and install apps**:
    ```shell
-   bench get-app --branch version-14 erpnext
+   bench get-app --branch version-14 erpnext 
    bench --site development.localhost install-app erpnext
    ```
 
