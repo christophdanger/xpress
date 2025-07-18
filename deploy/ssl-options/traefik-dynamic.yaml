@@ -1,0 +1,32 @@
+# Traefik dynamic configuration for self-signed certificates
+tls:
+  certificates:
+    - certFile: /etc/ssl/certs/cert.pem
+      keyFile: /etc/ssl/certs/key.pem
+      stores:
+        - default
+  
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /etc/ssl/certs/cert.pem
+        keyFile: /etc/ssl/certs/key.pem
+
+  options:
+    default:
+      minVersion: "VersionTLS12"
+      maxVersion: "VersionTLS13"
+      sslStrategies:
+        - "tls.SniStrict"
+      cipherSuites:
+        - "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+        - "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305"
+        - "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
+
+# HTTP to HTTPS redirect middleware
+http:
+  middlewares:
+    redirect-to-https:
+      redirectScheme:
+        scheme: https
+        permanent: true

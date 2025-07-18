@@ -227,14 +227,14 @@ pip3 install frappe-bench
 
 ## Production Deployment
 
-Xpress provides multiple deployment options from local development to production-ready infrastructure, all designed to be simple yet enterprise-ready.
+Xpress provides multiple deployment options from local development to production-ready infrastructure, all designed to be simple yet robust.
 
 ### Local Development Deployment
 
-The fastest way to get ERPNext running locally with production-like features:
+The fastest way to get ERPNext running locally with improved password handling:
 
 ```bash
-# Quick start - deploys ERPNext v15 with security hardening
+# Quick start - deploys ERPNext v15 with better security practices
 cd deploy/
 ./deploy_mmp_local.sh deploy
 
@@ -243,7 +243,7 @@ cd deploy/
 ```
 
 **Features:**
-- Enterprise-level security (no password exposure)
+- Improved password handling (no terminal exposure)
 - Automatic Docker and /etc/hosts setup
 - Grafana integration for monitoring
 - Complete lifecycle management

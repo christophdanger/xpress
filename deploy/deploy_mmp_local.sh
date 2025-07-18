@@ -58,11 +58,34 @@ download_easy_install() {
 
 # Deploy function
 deploy() {
-    local project="${1:-$DEFAULT_PROJECT}"
-    local sitename="${2:-$DEFAULT_SITENAME}"
-    local email="${3:-$DEFAULT_EMAIL}"
-    local image="${4:-$DEFAULT_IMAGE}"
-    local tag="${5:-$DEFAULT_TAG}"
+    local enable_ssl=false
+    local args=()
+    
+    # Parse arguments, filtering out flags
+    for arg in "$@"; do
+        case "$arg" in
+            --ssl)
+                enable_ssl=true
+                ;;
+            --help|-h|help)
+                show_help
+                exit 0
+                ;;
+            -*)
+                warn "Unknown flag: $arg (ignored)"
+                ;;
+            *)
+                args+=("$arg")
+                ;;
+        esac
+    done
+    
+    # Set parameters from filtered args
+    local project="${args[0]:-$DEFAULT_PROJECT}"
+    local sitename="${args[1]:-$DEFAULT_SITENAME}"
+    local email="${args[2]:-$DEFAULT_EMAIL}"
+    local image="${args[3]:-$DEFAULT_IMAGE}"
+    local tag="${args[4]:-$DEFAULT_TAG}"
     
     log "Deploying $project with $image:$tag"
     
@@ -139,6 +162,12 @@ EOF
     log "Connection details: ~/$project-connection-info.txt"
     log "Secure credentials: ~/$project-secrets.txt"
     log "Use '$0 show-secrets $project' to display passwords"
+    
+    # Add SSL if requested
+    if [[ "$enable_ssl" == true ]]; then
+        log "Adding SSL configuration..."
+        add_ssl "$project" "$sitename"
+    fi
 }
 
 # Cleanup function
@@ -153,7 +182,13 @@ cleanup() {
             sitename=$(grep "SITES=" "/home/$USER/$project.env" | cut -d'=' -f2 | tr -d '`')
         fi
         
-        docker compose -p "$project" -f "/home/$USER/$project-compose.yml" down -v
+        # Clean up SSL if it exists
+        if [[ -f "/home/$USER/$project-ssl-compose.yml" ]]; then
+            log "Removing SSL configuration..."
+            docker compose -p "$project" -f "/home/$USER/$project-compose.yml" -f "/home/$USER/$project-ssl-compose.yml" down -v
+        else
+            docker compose -p "$project" -f "/home/$USER/$project-compose.yml" down -v
+        fi
         
         # Clean up Grafana if it exists
         if [[ -f "/home/$USER/$project-grafana.yml" ]]; then
@@ -164,6 +199,8 @@ cleanup() {
         
         rm -f "/home/$USER/$project-compose.yml" "/home/$USER/$project.env"
         rm -f "/home/$USER/$project-secrets.txt" "/home/$USER/$project-connection-info.txt"
+        rm -f "/home/$USER/$project-ssl-compose.yml"
+        rm -rf "/home/$USER/$project-ssl-certs"
         
         # Remove hosts entry if it exists
         if [[ -n "$sitename" && "$sitename" == *.local ]]; then
@@ -337,40 +374,227 @@ show_secrets() {
     log "Connection info: ~/$project-connection-info.txt"
 }
 
+# Add SSL to existing deployment
+add_ssl() {
+    local project="${1:-$DEFAULT_PROJECT}"
+    local domain="${2:-mmp.local}"
+    
+    log "Adding SSL to $project deployment"
+    
+    if [[ ! -f "/home/$USER/$project-compose.yml" ]]; then
+        error "No deployment found for $project. Deploy first with: $0 deploy"
+    fi
+    
+    # Check if SSL is already enabled
+    if [[ -f "/home/$USER/$project-ssl-compose.yml" ]]; then
+        warn "SSL already enabled for $project"
+        return
+    fi
+    
+    # Generate certificates if they don't exist
+    local ssl_dir="/home/$USER/$project-ssl-certs"
+    if [[ ! -f "$ssl_dir/cert.pem" ]]; then
+        log "Generating SSL certificates for $domain..."
+        
+        # Create ssl-certs directory in user home
+        mkdir -p "$ssl_dir"
+        cd "$ssl_dir"
+        
+        # Create certificate configuration
+        cat > cert.conf << EOF
+[req]
+distinguished_name = req_distinguished_name
+req_extensions = v3_req
+prompt = no
+
+[req_distinguished_name]
+C = US
+ST = Local
+L = Local
+O = Local Development
+OU = IT Department
+CN = $domain
+
+[v3_req]
+keyUsage = keyEncipherment, dataEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = $domain
+DNS.2 = *.$domain
+DNS.3 = localhost
+DNS.4 = grafana.$domain
+DNS.5 = traefik.$domain
+IP.1 = 127.0.0.1
+IP.2 = ::1
+EOF
+        
+        # Generate private key and certificate
+        openssl genrsa -out key.pem 2048
+        openssl req -new -x509 -key key.pem -out cert.pem -days 365 -config cert.conf -extensions v3_req
+        
+        # Set proper permissions
+        chmod 600 key.pem
+        chmod 644 cert.pem
+        
+        # Clean up
+        rm cert.conf
+        
+        cd /home/cm/src/mmp/xpress/deploy
+        
+        log "SSL certificates generated successfully"
+    fi
+    
+    # Update /etc/hosts for SSL domains
+    local domains_to_add=(
+        "$domain"
+        "grafana.$domain"
+        "traefik.$domain"
+    )
+    
+    for d in "${domains_to_add[@]}"; do
+        if ! grep -q "127.0.0.1.*$d" /etc/hosts; then
+            log "Adding $d to /etc/hosts"
+            echo "127.0.0.1 $d" | sudo tee -a /etc/hosts > /dev/null
+        fi
+    done
+    
+    # Create SSL compose override
+    cat > "/home/$USER/$project-ssl-compose.yml" << EOF
+# SSL addon for $project - Generated by deploy_mmp_local.sh
+
+services:
+  traefik:
+    image: traefik:v2.11
+    container_name: $project-traefik-1
+    restart: unless-stopped
+    ports:
+      - "443:443"
+      - "80:80"
+      - "8081:8080"
+    command:
+      - --api.dashboard=true
+      - --api.insecure=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=${project}_default
+      - --providers.file.filename=/etc/traefik/dynamic.yaml
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.web.http.redirections.entrypoint.permanent=true
+      - --log.level=INFO
+      - --accesslog=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - $ssl_dir:/etc/ssl/certs:ro
+      - $PWD/ssl-options/traefik-dynamic.yaml:/etc/traefik/dynamic.yaml:ro
+    networks:
+      - default
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(\`traefik.$domain\`)"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls=true"
+      - "traefik.http.routers.dashboard.service=api@internal"
+
+  frontend:
+    ports: ~  # Remove direct port exposure using null override
+    expose:
+      - "8080"  # Expose to other containers only
+    environment:
+      - BACKEND=backend:8000
+      - SOCKETIO=websocket:9000
+      - FRAPPE_SITE_NAME_HEADER=\$\$host
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.$project-web.rule=Host(\`$domain\`)"
+      - "traefik.http.routers.$project-web.entrypoints=web"
+      - "traefik.http.routers.$project-web.middlewares=redirect-to-https"
+      - "traefik.http.routers.$project-websecure.rule=Host(\`$domain\`)"
+      - "traefik.http.routers.$project-websecure.entrypoints=websecure"
+      - "traefik.http.routers.$project-websecure.tls=true"
+      - "traefik.http.routers.$project-websecure.service=$project-service"
+      - "traefik.http.services.$project-service.loadbalancer.server.port=8080"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
+
+networks:
+  default:
+    name: ${project}_default
+EOF
+    
+    # Apply SSL configuration
+    log "Stopping deployment to apply SSL configuration..."
+    docker compose -p "$project" -f "/home/$USER/$project-compose.yml" down
+    
+    log "Starting with SSL configuration..."
+    docker compose -p "$project" -f "/home/$USER/$project-compose.yml" -f "/home/$USER/$project-ssl-compose.yml" up -d
+    
+    # Update connection info files
+    if [[ -f "/home/$USER/$project-connection-info.txt" ]]; then
+        sed -i "s|http://|https://|g" "/home/$USER/$project-connection-info.txt"
+        echo "" >> "/home/$USER/$project-connection-info.txt"
+        echo "=== SSL ENABLED ===" >> "/home/$USER/$project-connection-info.txt"
+        echo "Main site: https://$domain" >> "/home/$USER/$project-connection-info.txt"
+        echo "Grafana: https://grafana.$domain" >> "/home/$USER/$project-connection-info.txt"
+        echo "Traefik: https://traefik.$domain:8081" >> "/home/$USER/$project-connection-info.txt"
+        echo "" >> "/home/$USER/$project-connection-info.txt"
+        echo "Note: Browser will show security warning for self-signed certificates." >> "/home/$USER/$project-connection-info.txt"
+        echo "Click 'Advanced' and 'Accept Risk' to proceed." >> "/home/$USER/$project-connection-info.txt"
+    fi
+    
+    log "SSL enabled successfully!"
+    log "Access your site at: https://$domain"
+    log "Grafana (if added): https://grafana.$domain"
+    log "Traefik dashboard: https://traefik.$domain:8081"
+    log ""
+    warn "Browser will show security warning for self-signed certificates"
+    warn "This is normal - click 'Advanced' and 'Accept Risk' to proceed"
+}
+
 # Help function
 show_help() {
     cat << EOF
 Streamlined Frappe Local Deployment Script
 
 USAGE:
-    $0 deploy [project] [sitename] [email] [image] [tag]
+    $0 deploy [project] [sitename] [email] [image] [tag] [--ssl]
     $0 cleanup [project]
     $0 status [project] 
     $0 restart [project]
     $0 logs [project] [service]
     $0 add-grafana [project]
+    $0 add-ssl [project] [domain]
     $0 show-secrets [project]
     $0 docker-cleanup
 
 COMMANDS:
     deploy         - Deploy new instance (default: mmp-local, mmp.local, admin@mmp.local, frappe/erpnext, v15)
+                     Add --ssl flag to enable HTTPS with Traefik and self-signed certificates
     cleanup        - Remove deployment and cleanup volumes
     status         - Show container status
     restart        - Restart all services
     logs           - Follow logs (default service: backend)
     add-grafana    - Add Grafana with database access to existing deployment
+    add-ssl        - Add SSL/HTTPS with Traefik to existing deployment
     show-secrets   - Display passwords and secrets for deployment
     docker-cleanup - Remove all unused Docker resources
 
 EXAMPLES:
-    $0 deploy                                    # Deploy with defaults (latest/dev)
-    $0 deploy my-site my.local admin@my.local    # Custom site
+    $0 deploy                                    # Deploy with defaults (HTTP)
+    $0 deploy --ssl                              # Deploy with SSL/HTTPS enabled
+    $0 deploy my-site my.local admin@my.local    # Custom site (HTTP)
+    $0 deploy my-site my.local admin@my.local --ssl  # Custom site with SSL
     $0 deploy mmp-v15 mmp.local admin@mmp.local frappe/erpnext v15    # ERPNext 15 (stable)
     $0 deploy mmp-v14 mmp.local admin@mmp.local frappe/erpnext v14    # ERPNext 14 (stable)
     $0 deploy mmp-prod prod.local admin@prod.local devburner/mmp-erpnext latest  # Custom MMP image
     $0 status mmp-local                          # Check status
     $0 logs mmp-local frontend                   # Follow frontend logs
     $0 add-grafana mmp-local                     # Add Grafana to deployment
+    $0 add-ssl mmp-local                         # Add SSL/HTTPS to existing deployment
     $0 show-secrets mmp-local                    # Display passwords
     $0 cleanup mmp-local                         # Remove deployment
     $0 docker-cleanup                            # Clean up all Docker resources
@@ -403,6 +627,9 @@ case "${1:-deploy}" in
         ;;
     add-grafana)
         add_grafana "$2"
+        ;;
+    add-ssl)
+        add_ssl "$2" "$3"
         ;;
     show-secrets)
         show_secrets "$2"

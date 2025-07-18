@@ -1,2 +1,3 @@
 deploy/frappe_docker
+deploy/ssl-options/ssl-certs/
 *.log
