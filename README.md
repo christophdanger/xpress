@@ -5,14 +5,23 @@ An easy way to deliver the Frappe Framework to common IaaS, PaaS, and local syst
 
 xpress is a set of tooling to deliver, setup, and maintain infrastructure and configuration for hosting [Frappe Framework](https://frappeframework.com/) based applications (like [ERPNext](https://erpnext.com/)).
 
+**Quick paths to get started:**
+- **Local development:** [Development setup](#getting-started-with-frappe-development) with VSCode containers
+- **Local deployment:** [One-command deployment](#local-development-deployment) with `./deploy_mmp_local.sh deploy`
+- **Production infrastructure:** [AWS EC2 deployment](#aws-ec2---staging-environment) with Terraform
+
 The current minimum system requirements/packages can be found here on [Frappe's docs](https://github.com/frappe/bench/blob/develop/docs/installation.md#manual-install).
 
 ## Repository Structure
 
 ```
 xpress/
+├── deploy/                     # Local deployment scripts
+│   ├── deploy_mmp_local.sh     # Main deployment script
+│   ├── production-deployment-guide.md
+│   └── README.md               # Deployment documentation
 ├── docs/                       # Documentation and requirements
-    ├── ai/                     # AI generated, draft content
+│   ├── ai/                     # AI generated, draft content
 │   └── aws/                    # AWS-specific documentation
 ├── iac/                        # Infrastructure as Code
 │   ├── aws/                    # Amazon Web Services
@@ -218,11 +227,33 @@ pip3 install frappe-bench
 
 ## Production Deployment
 
-Outlined in Frappe's official docs, there are several ways to deploy Frappe and ERPNext to a target environment. Xpress is set up to provide some starter scripts to make deployment simple and flexible.
+Xpress provides multiple deployment options from local development to production-ready infrastructure, all designed to be simple yet enterprise-ready.
 
-See the `deploy` folder for deployment scripts and instructions:
+### Local Development Deployment
 
-* Single server Frappe, ERPNext, SSL (w/ Traefik) and local DB/redis hosting
+The fastest way to get ERPNext running locally with production-like features:
+
+```bash
+# Quick start - deploys ERPNext v15 with security hardening
+cd deploy/
+./deploy_mmp_local.sh deploy
+
+# Access at http://mmp.local:8080
+# View credentials: ./deploy_mmp_local.sh show-secrets mmp-local
+```
+
+**Features:**
+- Enterprise-level security (no password exposure)
+- Automatic Docker and /etc/hosts setup
+- Grafana integration for monitoring
+- Complete lifecycle management
+- Built on official Frappe easy-install.py
+
+**[See full documentation](deploy/README.md)**
+
+### Production Infrastructure
+
+For production environments, choose from these battle-tested options:
 
 ## Infrastructure Deployments
 

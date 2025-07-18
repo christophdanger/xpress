@@ -1,6 +1,6 @@
 # MMP Local Deployment
 
-Deploy ERPNext locally on Ubuntu with the MMP Core app using Docker.
+Deploy ERPNext locally on Ubuntu with the MMP Core app using Docker with enterprise-level security.
 
 ## Quick Start
 
@@ -19,7 +19,7 @@ Deploy ERPNext locally on Ubuntu with the MMP Core app using Docker.
 ```
 
 **Access:** `http://mmp.local:8080` (or your sitename)  
-**Admin Password:** Check `~/mmp-local.env` file
+**Credentials:** Run `./deploy_mmp_local.sh show-secrets mmp-local` to display passwords
 
 ## Commands
 
@@ -36,6 +36,12 @@ Deploy ERPNext locally on Ubuntu with the MMP Core app using Docker.
 # Restart services
 ./deploy_mmp_local.sh restart [project]
 
+# Add Grafana with database access
+./deploy_mmp_local.sh add-grafana [project]
+
+# Display passwords securely
+./deploy_mmp_local.sh show-secrets [project]
+
 # Complete cleanup
 ./deploy_mmp_local.sh cleanup [project]
 
@@ -45,11 +51,19 @@ Deploy ERPNext locally on Ubuntu with the MMP Core app using Docker.
 
 ## What It Does
 
-- Installs Docker if needed and sets up permissions
-- Downloads and runs official Frappe easy-install.py
-- Automatically adds `.local` domains to `/etc/hosts`
-- Creates full ERPNext stack with all services
-- Provides simple management commands
+- **Secure deployment** with enterprise-level password management
+- **Automatic setup** of Docker, permissions, and `/etc/hosts`
+- **Official Frappe integration** using easy-install.py
+- **Grafana integration** with database access for monitoring
+- **Complete lifecycle management** from deploy to cleanup
+
+## Security Features
+
+- **No password exposure** in terminal output
+- **Encrypted storage** of credentials in secure files (chmod 600)
+- **Gitignore protection** for all sensitive files
+- **Separate secrets management** with show-secrets command
+- **Clean connection info** files without passwords
 
 ## Configuration Options
 
@@ -70,19 +84,37 @@ Deploy ERPNext locally on Ubuntu with the MMP Core app using Docker.
 - `devburner/mmp-erpnext:latest` - Production MMP image
 - `frappe/frappe:latest` - Base Frappe only
 
-## Troubleshooting
+## Grafana Integration
 
-**Docker permissions:** Logout/login if you get permission errors  
-**Site not accessible:** Check `/etc/hosts` has your sitename  
-**Container issues:** Use `docker ps` and `docker logs <container>`
+Add monitoring and analytics to your deployment:
 
-## Files
+```bash
+# Add Grafana after deployment
+./deploy_mmp_local.sh add-grafana mmp-local
 
+# Access Grafana at http://localhost:3000
+# Database connection details provided automatically
+```
+
+## Files Created
+
+**During deployment:**
+- `~/project-connection-info.txt` - Safe connection details
+- `~/project-secrets.txt` - Encrypted passwords (chmod 600)
+
+**Script files:**
 - `deploy_mmp_local.sh` - Main deployment script
 - `mmp-ec2.yaml` - Production EC2 deployment config  
 - `production-deployment-guide.md` - Manual deployment guide
 - `archive/` - Previous script versions (reference only)
 
+## Troubleshooting
+
+**Docker permissions:** Logout/login if you get permission errors  
+**Site not accessible:** Check `/etc/hosts` has your sitename  
+**Container issues:** Use `docker ps` and `docker logs <container>`  
+**Forgot passwords:** Run `./deploy_mmp_local.sh show-secrets project-name`
+
 ## Based On
 
-Production deployment at `mmp.devburner.io` using official Frappe easy-install script with additional local development conveniences.
+Production deployment at `mmp.devburner.io` using official Frappe easy-install script with additional enterprise security and monitoring features.
