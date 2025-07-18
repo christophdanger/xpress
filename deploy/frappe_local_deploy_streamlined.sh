@@ -86,8 +86,16 @@ deploy() {
         --app erpnext \
         --image "$image" \
         --version "$tag"
+    
+    # Add hosts entry for .local domain
+    if [[ "$sitename" == *.local ]]; then
+        if ! grep -q "127.0.0.1.*$sitename" /etc/hosts; then
+            log "Adding $sitename to /etc/hosts"
+            echo "127.0.0.1 $sitename" | sudo tee -a /etc/hosts > /dev/null
+        fi
+    fi
         
-    log "Deployment completed. Access at: http://localhost:8080 (Host: $sitename)"
+    log "Deployment completed. Access at: http://$sitename:8080"
     log "Admin credentials in: /home/$USER/$project.env"
 }
 
@@ -97,8 +105,23 @@ cleanup() {
     log "Cleaning up $project deployment"
     
     if [[ -f "/home/$USER/$project-compose.yml" ]]; then
+        # Get sitename from env file for hosts cleanup
+        local sitename=""
+        if [[ -f "/home/$USER/$project.env" ]]; then
+            sitename=$(grep "SITES=" "/home/$USER/$project.env" | cut -d'=' -f2 | tr -d '`')
+        fi
+        
         docker compose -p "$project" -f "/home/$USER/$project-compose.yml" down -v
         rm -f "/home/$USER/$project-compose.yml" "/home/$USER/$project.env"
+        
+        # Remove hosts entry if it exists
+        if [[ -n "$sitename" && "$sitename" == *.local ]]; then
+            if grep -q "127.0.0.1.*$sitename" /etc/hosts; then
+                log "Removing $sitename from /etc/hosts"
+                sudo sed -i "/127.0.0.1.*$sitename/d" /etc/hosts
+            fi
+        fi
+        
         log "Cleanup completed"
     else
         warn "No deployment found for $project"
