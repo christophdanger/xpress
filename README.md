@@ -6,9 +6,9 @@ An easy way to deliver the Frappe Framework to common IaaS, PaaS, and local syst
 xpress is a set of tooling to deliver, setup, and maintain infrastructure and configuration for hosting [Frappe Framework](https://frappeframework.com/) based applications (like [ERPNext](https://erpnext.com/)).
 
 **Quick paths to get started:**
-- **Local development:** [Development setup](#getting-started-with-frappe-development) with VSCode containers
-- **Docker image building:** [Custom image builds](#docker-image-building) with `./build_mmp_stack.sh build`
-- **Local deployment:** [One-command deployment](#local-development-deployment) with `./deploy_mmp_local.sh deploy`
+- **Development setup:** `./dev_mmp_stack.sh init my-project` - [VSCode dev containers](#getting-started-with-frappe-development) 
+- **Docker image building:** `./build_mmp_stack.sh build` - [Custom image builds](#docker-image-building)
+- **Local deployment:** `./deploy_mmp_local.sh deploy --ssl` - [One-command deployment](#local-development-deployment)
 - **Production infrastructure:** [AWS EC2 deployment](#aws-ec2---staging-environment) with Terraform
 
 The current minimum system requirements/packages can be found here on [Frappe's docs](https://github.com/frappe/bench/blob/develop/docs/installation.md#manual-install).
@@ -18,6 +18,7 @@ The current minimum system requirements/packages can be found here on [Frappe's 
 ```
 xpress/
 ├── deploy/                     # Build and deployment scripts
+│   ├── dev_mmp_stack.sh        # Development environment setup
 │   ├── build_mmp_stack.sh      # Docker image building script
 │   ├── deploy_mmp_local.sh     # Main deployment script
 │   ├── ssl-options/            # SSL/HTTPS configuration files
@@ -35,7 +36,35 @@ xpress/
 
 # Getting Started with Frappe Development
 
-You can follow the detailed guide here [Frappe Docker - Development](https://github.com/frappe/frappe_docker/blob/main/docs/development.md), but the following is a concise version to get up and running with a local development environment using Docker, VS Code, and Dev Containers:
+We've streamlined the VSCode dev container setup to be dead simple. One command gets you a fully configured development environment:
+
+```bash
+# Quick setup
+cd deploy/
+./dev_mmp_stack.sh init my-project --with-mmp
+code ../development/my-project/frappe_docker/
+# In VSCode: "Dev Containers: Reopen in Container"
+```
+
+This gives you the proven VSCode workflow with zero configuration hassle. 
+
+### Complete Development Workflow
+
+```bash
+# 1. Set up development environment
+./dev_mmp_stack.sh init my-project --with-mmp
+code ../development/my-project/frappe_docker/
+
+# 2. Develop in VSCode (create custom apps, push to GitHub)
+
+# 3. Build production image
+./build_mmp_stack.sh build --app github.com/user/my-app:main --push
+
+# 4. Deploy and test
+./deploy_mmp_local.sh deploy --ssl
+```
+
+For the traditional manual approach, see below:
 
 ## Prerequisites
 

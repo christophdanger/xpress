@@ -9,6 +9,7 @@ Xpress is a deployment toolchain for Frappe Framework applications (like ERPNext
 ## Key Architecture Components
 
 ### Build and Deployment Scripts (`deploy/`)
+- **Development setup**: `dev_mmp_stack.sh` - VSCode-first development environment setup
 - **Docker build script**: `build_mmp_stack.sh` - Flexible Docker image building with smart defaults
 - **Main deployment script**: `deploy_mmp_local.sh` - Comprehensive local deployment with SSL support
 - **SSL integration**: Uses Traefik reverse proxy with self-signed certificates for local HTTPS
@@ -27,6 +28,24 @@ Xpress is a deployment toolchain for Frappe Framework applications (like ERPNext
 - **Port management**: Traefik dashboard on 8081 to avoid conflicts with frontend on 8080
 
 ## Common Commands
+
+### Development Environment Setup
+```bash
+# Initialize development environments
+cd deploy/
+./dev_mmp_stack.sh init my-project                    # Standard Frappe + ERPNext
+./dev_mmp_stack.sh init mmp-dev --with-mmp             # Include MMP Core
+./dev_mmp_stack.sh init frappe-only --no-erpnext       # Frappe framework only
+
+# Environment management
+./dev_mmp_stack.sh list                               # List all environments
+./dev_mmp_stack.sh info my-project                    # Show environment details
+./dev_mmp_stack.sh clean my-project                   # Remove environment
+
+# VSCode workflow
+code ../development/my-project/frappe_docker/         # Open in VSCode
+# In VSCode: Ctrl+Shift+P -> "Dev Containers: Reopen in Container"
+```
 
 ### Docker Image Building
 ```bash
@@ -90,10 +109,26 @@ cd ../
 ## Development Setup
 
 ### Frappe Development Environment
-The project supports VSCode Dev Containers for Frappe development:
-- Uses `frappe_docker` repository (gitignored in deploy/)
-- Dev container setup with MariaDB/PostgreSQL options
-- Bench-based development workflow with hot reloading
+The project provides a streamlined development setup using VSCode Dev Containers:
+
+```bash
+# Initialize development environment
+cd deploy/
+./dev_mmp_stack.sh init my-project --with-mmp
+
+# Open in VSCode
+code ../development/my-project/frappe_docker/
+
+# In VSCode: Reopen in Container
+# Then follow setup instructions in container
+```
+
+**Key Features:**
+- **VSCode-first approach**: Prepares environment, guides to proper VSCode workflow
+- **Separate from build**: Development and build processes cleanly separated
+- **Git-centric**: Custom apps pushed to GitHub, then included in builds
+- **Environment isolation**: Dev environments in `../development/` to keep repo clean
+- **Complete setup instructions**: Generated per environment with step-by-step guides
 
 ### Docker Image Building
 - **Smart defaults**: Frappe + ERPNext by default (no MMP Core unless requested)
@@ -148,6 +183,25 @@ curl -k -H "Host: grafana.mmp.local" https://localhost/
 # Replace YOUR_EC2_IP with actual EC2 instance IP
 curl -k -H "Host: mmp.local" https://YOUR_EC2_IP/
 curl -k -H "Host: grafana.mmp.local" https://YOUR_EC2_IP/
+```
+
+## Complete Development Workflows
+
+### Development → Build → Deploy Workflow
+```bash
+# 1. Set up development environment
+cd deploy/
+./dev_mmp_stack.sh init my-project --with-mmp
+
+# 2. Develop in VSCode
+code ../development/my-project/frappe_docker/
+# (Reopen in Container, create custom apps, push to GitHub)
+
+# 3. Build production image
+./build_mmp_stack.sh build --app github.com/user/my-app:main --push
+
+# 4. Deploy and test
+./deploy_mmp_local.sh deploy --ssl
 ```
 
 ## Build and Deploy Workflows
