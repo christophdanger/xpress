@@ -153,12 +153,80 @@ setup_devcontainer() {
         log "Devcontainer configuration copied"
     fi
     
+    # Create development directory (required for VSCode working directory)
+    mkdir -p "$frappe_docker_path/development"
+    
     # Copy VSCode configuration
     if [[ ! -d "$frappe_docker_path/development/.vscode" ]]; then
-        mkdir -p "$frappe_docker_path/development"
         cp -r "$frappe_docker_path/development/vscode-example" "$frappe_docker_path/development/.vscode"
         log "VSCode configuration copied"
     fi
+    
+    log "Development directory created for VSCode"
+}
+
+# Generate customized bench setup script
+generate_bench_setup_script() {
+    local dev_name="$1"
+    local frappe_version="$2"
+    local site_name="$3"
+    local with_erpnext="$4"
+    local with_mmp="$5"
+    local dev_path="$DEV_BASE_DIR/$dev_name"
+    local frappe_docker_path="$dev_path/frappe_docker"
+    
+    log "Generating automated setup script..."
+    
+    # Build the template replacements
+    local erpnext_flag=""
+    local mmp_flag=""
+    
+    if [[ "$with_erpnext" == "true" ]]; then
+        erpnext_flag=" + ERPNext"
+    fi
+    
+    if [[ "$with_mmp" == "true" ]]; then
+        mmp_flag=" + MMP Core"
+    fi
+    
+    # Create the customized setup script using multiple sed passes
+    cp setup-bench-template.sh "$frappe_docker_path/development/setup-bench.sh"
+    
+    sed -i "s/{{FRAPPE_VERSION}}/$frappe_version/g" "$frappe_docker_path/development/setup-bench.sh"
+    sed -i "s/{{ERPNEXT_FLAG}}/$erpnext_flag/g" "$frappe_docker_path/development/setup-bench.sh"
+    sed -i "s/{{MMP_FLAG}}/$mmp_flag/g" "$frappe_docker_path/development/setup-bench.sh"
+    sed -i "s/{{SITE_NAME}}/$site_name/g" "$frappe_docker_path/development/setup-bench.sh"
+    
+    # Handle multiline replacements
+    if [[ "$with_erpnext" == "true" ]]; then
+        sed -i '/{{ERPNEXT_INSTALL}}/c\
+log "Installing ERPNext..."\
+bench get-app --branch '"$frappe_version"' erpnext' "$frappe_docker_path/development/setup-bench.sh"
+        
+        sed -i '/{{ERPNEXT_SITE_INSTALL}}/c\
+log "Installing ERPNext on site..."\
+bench --site '"$site_name"' install-app erpnext' "$frappe_docker_path/development/setup-bench.sh"
+    else
+        sed -i '/{{ERPNEXT_INSTALL}}/d' "$frappe_docker_path/development/setup-bench.sh"
+        sed -i '/{{ERPNEXT_SITE_INSTALL}}/d' "$frappe_docker_path/development/setup-bench.sh"
+    fi
+    
+    if [[ "$with_mmp" == "true" ]]; then
+        sed -i '/{{MMP_INSTALL}}/c\
+log "Installing MMP Core..."\
+bench get-app --branch develop https://github.com/christophdanger/mmp_core.git' "$frappe_docker_path/development/setup-bench.sh"
+        
+        sed -i '/{{MMP_SITE_INSTALL}}/c\
+log "Installing MMP Core on site..."\
+bench --site '"$site_name"' install-app mmp_core' "$frappe_docker_path/development/setup-bench.sh"
+    else
+        sed -i '/{{MMP_INSTALL}}/d' "$frappe_docker_path/development/setup-bench.sh"
+        sed -i '/{{MMP_SITE_INSTALL}}/d' "$frappe_docker_path/development/setup-bench.sh"
+    fi
+    
+    chmod +x "$frappe_docker_path/development/setup-bench.sh"
+    
+    log "Automated setup script created: setup-bench.sh"
 }
 
 # Create setup instructions file
@@ -185,7 +253,13 @@ create_setup_instructions() {
    - Type: "Dev Containers: Reopen in Container"
    - Wait for container to build (first time takes 5-10 minutes)
 
-3. **Initialize Bench** (inside container terminal):
+3. **Automated Setup** (inside container terminal):
+   \`\`\`bash
+   cd development/
+   ./setup-bench.sh
+   \`\`\`
+   
+   **OR Manual Setup** (if you prefer step-by-step):
    \`\`\`bash
    cd development/
    bench init --skip-redis-config-generation --frappe-branch $frappe_version frappe-bench
@@ -198,20 +272,15 @@ create_setup_instructions() {
    bench set-config -g redis_socketio redis://redis-queue:6379
    
    # Edit Procfile for Redis containers
-   sed -i '/redis/d' ./Procfile
-   \`\`\`
-
-4. **Install Apps** (if desired):
-   \`\`\`bash$(if [[ "$with_erpnext" == "true" ]]; then echo "
+   sed -i '/redis/d' ./Procfile$(if [[ "$with_erpnext" == "true" ]]; then echo "
+   
    # Install ERPNext
    bench get-app --branch $frappe_version erpnext"; fi)$(if [[ "$with_mmp" == "true" ]]; then echo "
    
    # Install MMP Core
    bench get-app --branch develop https://github.com/christophdanger/mmp_core.git"; fi)
-   \`\`\`
-
-5. **Create Site**:
-   \`\`\`bash
+   
+   # Create site
    bench new-site --no-mariadb-socket --admin-password admin $site_name$(if [[ "$with_erpnext" == "true" ]]; then echo "
    bench --site $site_name install-app erpnext"; fi)$(if [[ "$with_mmp" == "true" ]]; then echo "
    bench --site $site_name install-app mmp_core"; fi)
@@ -221,7 +290,7 @@ create_setup_instructions() {
    bench --site $site_name clear-cache
    \`\`\`
 
-6. **Start Development**:
+4. **Start Development**:
    \`\`\`bash
    bench start
    \`\`\`
@@ -388,6 +457,7 @@ init_environment() {
     setup_dev_directory
     setup_frappe_docker "$dev_name"
     setup_devcontainer "$dev_name"
+    generate_bench_setup_script "$dev_name" "$frappe_version" "$site_name" "$with_erpnext" "$with_mmp"
     create_setup_instructions "$dev_name" "$frappe_version" "$site_name" "$with_erpnext" "$with_mmp"
     generate_dev_info "$dev_name" "$site_name" "$admin_email" "$with_erpnext" "$with_mmp"
     
@@ -400,7 +470,10 @@ init_environment() {
     info "2. In VSCode (Ctrl+Shift+P):"
     info "   'Dev Containers: Reopen in Container'"
     info ""
-    info "3. Follow setup instructions:"
+    info "3. Run automated setup (in container terminal):"
+    info "   cd development && ./setup-bench.sh"
+    info ""
+    info "4. Or read full instructions:"
     info "   cat $dev_path/SETUP-INSTRUCTIONS.md"
     log ""
     warn "This script only PREPARES the environment. Use VSCode for actual development."

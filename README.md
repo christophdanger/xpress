@@ -1,17 +1,56 @@
 # xpress
 An easy way to deliver the Frappe Framework to common IaaS, PaaS, and local systems.
 
+## Quick Start
+
+Choose your path to get started with Frappe/ERPNext development and deployment:
+
+### 🚀 For Developers: Complete Dev-to-Deploy Workflow
+```bash
+# 1. Set up development environment
+cd deploy/
+./dev_mmp_stack.sh init my-project --with-mmp
+code ../development/my-project/frappe_docker/
+
+# 2. In VSCode: "Dev Containers: Reopen in Container", then:
+cd development && ./setup-bench.sh
+
+# 3. Develop your custom apps, then build production image
+./build_mmp_stack.sh build --app github.com/user/my-app:main --push
+
+# 4. Deploy and test
+./deploy_mmp_local.sh deploy --ssl
+```
+
+### 🏗️ For DevOps: Docker Images & Deployment
+```bash
+# Build and deploy standard ERPNext stack
+cd deploy/
+./build_mmp_stack.sh build --push
+./deploy_mmp_local.sh deploy --ssl
+
+# Access: https://mmp.local (credentials via ./deploy_mmp_local.sh show-secrets mmp-local)
+```
+
+### ☁️ For Production: Infrastructure as Code
+```bash
+# Deploy to AWS EC2 with Terraform
+cd iac/aws/ec2/terraform/
+./deploy-backend.sh
+```
+
+---
+
 ## Overview
 
 xpress is a set of tooling to deliver, setup, and maintain infrastructure and configuration for hosting [Frappe Framework](https://frappeframework.com/) based applications (like [ERPNext](https://erpnext.com/)).
 
-**Quick paths to get started:**
-- **Development setup:** `./dev_mmp_stack.sh init my-project` - [VSCode dev containers](#getting-started-with-frappe-development) 
-- **Docker image building:** `./build_mmp_stack.sh build` - [Custom image builds](#docker-image-building)
-- **Local deployment:** `./deploy_mmp_local.sh deploy --ssl` - [One-command deployment](#local-development-deployment)
-- **Production infrastructure:** [AWS EC2 deployment](#aws-ec2---staging-environment) with Terraform
-
-The current minimum system requirements/packages can be found here on [Frappe's docs](https://github.com/frappe/bench/blob/develop/docs/installation.md#manual-install).
+**Key Features:**
+- **Development setup:** VSCode dev containers with automated bench setup
+- **Docker image building:** Flexible builds with smart defaults  
+- **Local deployment:** One-command deployment with SSL support
+- **Production infrastructure:** AWS EC2 deployment with Terraform
+- **End-to-end workflow:** Development → Build → Deploy pipeline
 
 ## Repository Structure
 
@@ -21,62 +60,77 @@ xpress/
 │   ├── dev_mmp_stack.sh        # Development environment setup
 │   ├── build_mmp_stack.sh      # Docker image building script
 │   ├── deploy_mmp_local.sh     # Main deployment script
+│   ├── setup-bench-template.sh # Automated bench setup template
 │   ├── ssl-options/            # SSL/HTTPS configuration files
-│   ├── production-deployment-guide.md
 │   └── README.md               # Deployment documentation
 ├── docs/                       # Documentation and requirements
-│   ├── ai/                     # AI generated, draft content
-│   └── aws/                    # AWS-specific documentation
 ├── iac/                        # Infrastructure as Code
-│   ├── aws/                    # Amazon Web Services
-│   ├── azure/                  # Microsoft Azure (planned)
-│   └── gcp/                    # Google Cloud Platform (planned)
+│   └── aws/                    # Amazon Web Services (EC2 ready)
 └── README.md                   # This file
 ```
 
-# Getting Started with Frappe Development
+# Development
 
-We've streamlined the VSCode dev container setup to be dead simple. One command gets you a fully configured development environment:
+## VSCode Development Environment
+
+We've streamlined the VSCode dev container setup to be dead simple. One command gets you a fully configured development environment with automated bench setup:
 
 ```bash
-# Quick setup
+# Create environment with automated setup script
 cd deploy/
 ./dev_mmp_stack.sh init my-project --with-mmp
 code ../development/my-project/frappe_docker/
-# In VSCode: "Dev Containers: Reopen in Container"
+
+# In VSCode: "Dev Containers: Reopen in Container", then run:
+cd development && ./setup-bench.sh
 ```
 
-This gives you the proven VSCode workflow with zero configuration hassle. 
+This gives you the proven VSCode workflow with zero configuration hassle and one-command bench setup.
 
-### Complete Development Workflow
+### Development Environment Options
 
 ```bash
-# 1. Set up development environment
-./dev_mmp_stack.sh init my-project --with-mmp
-code ../development/my-project/frappe_docker/
+# Standard development setup
+./dev_mmp_stack.sh init my-project                    # Frappe + ERPNext
 
-# 2. Develop in VSCode (create custom apps, push to GitHub)
+# MMP development  
+./dev_mmp_stack.sh init mmp-dev --with-mmp             # Include MMP Core
 
-# 3. Build production image
-./build_mmp_stack.sh build --app github.com/user/my-app:main --push
+# Custom configuration
+./dev_mmp_stack.sh init client-app --site-name client.localhost --frappe-version version-14
 
-# 4. Deploy and test
-./deploy_mmp_local.sh deploy --ssl
+# Frappe only (no ERPNext)
+./dev_mmp_stack.sh init frappe-only --no-erpnext
 ```
 
-For the traditional manual approach, see below:
+### Development Workflow Benefits
+
+- **Automated setup**: Custom `setup-bench.sh` script for one-command bench initialization
+- **Configuration-aware**: Setup script customized based on your choices (ERPNext, MMP Core, site name)
+- **VSCode-first**: Proven workflow with dev containers
+- **Git-centric**: Custom apps pushed to GitHub, then included in builds
+- **Environment isolation**: Dev environments in `../development/` to keep repo clean
+- **Flexible**: Automated script for speed, manual instructions for learning
 
 ## Prerequisites
 
 Before you begin, ensure you have the following installed and configured:
 
 - **Docker** and **docker-compose**
+- **VSCode** with [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
 - **User added to Docker group**
 - **Memory allocation**: Allocate at least 4GB of RAM to Docker.
     - [Windows instructions](https://docs.docker.com/docker-for-windows/#resources)
     - [macOS instructions](https://docs.docker.com/desktop/settings/mac/#advanced)
 
-## Setting Up Frappe Development Containers
+## Manual Development Setup
+
+If you prefer the traditional manual approach or want to understand the process:
+
+<details>
+<summary>Click to expand manual setup instructions</summary>
+
+### Setting Up Frappe Development Containers
 
 1. **Clone and navigate to the Frappe Docker repository**:
    ```shell
@@ -94,37 +148,22 @@ Before you begin, ensure you have the following installed and configured:
      cp -R development/vscode-example development/.vscode
      ```
 
-## Using VSCode Remote Containers
-
-Frappe development is best managed with [VSCode Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers).
-
-### Steps
+### Using VSCode Remote Containers
 
 1. **Set up the database**:
    - By default, MariaDB is used. To switch to PostgreSQL, edit `.devcontainer/docker-compose.yml` to uncomment the `postgresql` service and comment out `mariadb`.
 
-2. **Install Dev Containers extension**:
-   - Run the command: `code --install-extension ms-vscode-remote.remote-containers` or install from VSCode Extensions (Ctrl+Shift+X on Windows, Cmd+Shift+X on macOS).
-
-3. **Open Frappe Docker folder in a container**:
+2. **Open Frappe Docker folder in a container**:
    - In VSCode, run: `Dev Containers: Reopen in Container` from Command Palette (Ctrl+Shift+P).
 
-> **Note**: The `development` directory is ignored by Git and mounted in the container. Use this for all benches (Frappe installations).
-
-## Initial Bench Setup
+### Initial Bench Setup
 
 Run these commands in the container terminal. Make sure the user is **frappe**.
 
 1. **Initialize the bench**:
    ```shell
-   bench init --skip-redis-config-generation --frappe-branch version-14 frappe-bench
+   bench init --skip-redis-config-generation --frappe-branch version-15 frappe-bench
    cd frappe-bench
-   ```
-
-   > For version 13, use Python 3.9 and Node v14:
-   ```shell
-   nvm use v14
-   PYENV_VERSION=3.9.17 bench init --skip-redis-config-generation --frappe-branch version-13 frappe-bench
    ```
 
 2. **Set up hosts**:
@@ -140,38 +179,28 @@ Run these commands in the container terminal. Make sure the user is **frappe**.
    sed -i '/redis/d' ./Procfile
    ```
 
-## Creating a New Site
-
-Run the following commands to create a site:
+### Creating a New Site
 
 1. **Create the site**:
    ```shell
    bench new-site --no-mariadb-socket development.localhost
    ```
-   > Replace `development.localhost` with your site name. MariaDB root password is `123`.
 
-2. **Use PostgreSQL** (if preferred):
-   ```shell
-   bench new-site --db-type postgres --db-host postgresql mypgsql.localhost
-   ```
-
-3. **Enable Developer Mode**:
+2. **Enable Developer Mode**:
    ```shell
    bench --site development.localhost set-config developer_mode 1
    bench --site development.localhost clear-cache
    ```
 
-## Installing Apps
+### Installing Apps
 
 1. **Fetch and install apps**:
    ```shell
-   bench get-app --branch version-14 erpnext 
+   bench get-app --branch version-15 erpnext 
    bench --site development.localhost install-app erpnext
    ```
 
-   > **Note**: Frappe and ERPNext must be on the same version branch (e.g., version-14).
-
-## Starting Frappe
+### Starting Frappe
 
 1. **Run Frappe**:
    ```shell
@@ -180,66 +209,13 @@ Run the following commands to create a site:
    - Access Frappe at [http://development.localhost:8000](http://development.localhost:8000)
    - Login with user `Administrator` and the password set during site creation.
 
-## Debugging in VSCode
+</details>
 
-1. **Install Python extension for VSCode**:
-   - Open the Extensions tab, search for `ms-python.python`, and install it on the dev container.
-   
-2. **Start with debugging**:
-   - Use the following to start Frappe processes without Redis and web:
-     ```shell
-     honcho start socketio watch schedule worker_short worker_long
-     ```
-   - Launch the `web` process from the VSCode debugger tab.
-
-## Interactive Console for Development
-
-1. **Launch Frappe Console**:
-   ```shell
-   bench --site development.localhost console
-   ```
-2. **Jupyter integration**:
-   - Run the following in a Jupyter cell:
-     ```python
-     import frappe
-     frappe.init(site='development.localhost', sites_path='/workspace/development/frappe-bench/sites')
-     frappe.connect()
-     frappe.local.lang = frappe.db.get_default('lang')
-     frappe.db.connect()
-     ```
-
-## Additional Tools
-
-1. **Mailpit for Email Testing**:
-   - Uncomment the `mailpit` service in `docker-compose.yml`. Access Mailpit UI at `localhost:8025`.
-
-2. **Cypress UI Tests**:
-   - Install X11 tooling and configure the environment for Cypress testing.
-   - Refer to [Cypress Documentation](https://www.cypress.io/blog/2019/05/02/run-cypress-with-a-single-docker-command) for more.
-
-## Manual Container Management
-
-To run containers outside VSCode:
-
-1. **Start Containers**:
-   ```shell
-   docker-compose -f .devcontainer/docker-compose.yml up -d
-   ```
-
-2. **Enter Development Container**:
-   ```shell
-   docker exec -e "TERM=xterm-256color" -w /workspace/development -it devcontainer-frappe-1 bash
-   ```
-
----
-
-This structured guide should streamline your Frappe development setup while preserving essential details.
-
-## Docker Image Building
+# Docker Image Building
 
 Xpress provides a flexible Docker image building script that simplifies creating custom Frappe stacks. It features smart defaults with full flexibility when needed.
 
-### Quick Start
+## Quick Start
 
 ```bash
 # Standard build (Frappe + ERPNext)
@@ -254,7 +230,7 @@ cd deploy/
 ./deploy_mmp_local.sh deploy --ssl
 ```
 
-### Build Options
+## Build Options
 
 **Smart Defaults:**
 - **Default**: Frappe + ERPNext (what most developers need)
@@ -280,23 +256,6 @@ cd deploy/
 ./build_mmp_stack.sh build --registry ghcr.io/username --push
 ```
 
-### End-to-End Workflow
-
-```bash
-# 1. One-time setup
-./build_mmp_stack.sh setup
-
-# 2. Build and deploy
-./build_mmp_stack.sh build --push
-./deploy_mmp_local.sh deploy --ssl
-
-# 3. Add monitoring
-./deploy_mmp_local.sh add-grafana mmp-local
-
-# 4. Test and iterate
-./deploy_mmp_local.sh show-secrets mmp-local
-```
-
 **Features:**
 - Smart defaults without over-engineering
 - Flexible app configuration via command line or JSON files
@@ -306,33 +265,9 @@ cd deploy/
 
 **[See full documentation](deploy/README.md)**
 
-## Manual Install (referenced from Frappe's docs)
-To manually install frappe/erpnext, you can follow this this wiki for Linux and this wiki for MacOS. It gives an excellent explanation about the stack. You can also follow the steps mentioned below:
+# Deployment
 
-1. Install Prerequisites
-    * Python 3.6+
-    * Node.js 12
-    * Redis 5					(caching and realtime updates)
-    * MariaDB 10.3 / Postgres 9.5			(to run database driven apps)
-    * yarn 1.12+					(js dependency manager)
-    * pip 15+					(py dependency manager)
-    * cron 						(scheduled jobs)
-    * wkhtmltopdf (version 0.12.5 with patched qt) 	(for pdf generation)
-• Nginx 					(for production)
-
-2. Install Bench
-
-Install the latest bench using pip:
-
-```
-pip3 install frappe-bench
-```
-
-## Production Deployment
-
-Xpress provides multiple deployment options from local development to production-ready infrastructure, all designed to be simple yet robust.
-
-### Local Development Deployment
+## Local Development Deployment
 
 The fastest way to get ERPNext running locally with improved password handling and SSL support:
 
@@ -363,11 +298,7 @@ cd deploy/
 
 **[See full documentation](deploy/README.md)**
 
-### Production Infrastructure
-
-For production environments, choose from these battle-tested options:
-
-## Infrastructure Deployments
+## Production Infrastructure
 
 ### AWS EC2 - Staging Environment
 A cost-effective, single-instance deployment perfect for development and small-scale production.
@@ -395,9 +326,22 @@ cd iac/aws/ec2/terraform/
 
 [View all deployment options](iac/README.md)
 
+## Manual Install (Alternative)
+
+To manually install frappe/erpnext, you can follow the [official Frappe documentation](https://github.com/frappe/bench/blob/develop/docs/installation.md#manual-install). 
+
+**Prerequisites:**
+- Python 3.6+, Node.js 12, Redis 5, MariaDB 10.3/Postgres 9.5
+- yarn 1.12+, pip 15+, cron, wkhtmltopdf, Nginx (for production)
+
+**Install Bench:**
+```bash
+pip3 install frappe-bench
+```
+
 ## Contributing
 
-Contributing to this project is easy and straightforward. Simply follow these steps:
+Contributing to this project is easy and straightforward:
 
 1. Fork the repository to your own GitHub account.
 2. Clone the forked repository to your local machine.
@@ -408,3 +352,7 @@ Contributing to this project is easy and straightforward. Simply follow these st
 7. Submit a pull request from your branch to the main repository.
 8. The maintainers will review your pull request and provide feedback if needed.
 9. Once your changes are approved, they will be merged into the main codebase.
+
+## System Requirements
+
+The current minimum system requirements/packages can be found in [Frappe's documentation](https://github.com/frappe/bench/blob/develop/docs/installation.md#manual-install).

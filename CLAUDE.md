@@ -109,7 +109,7 @@ cd ../
 ## Development Setup
 
 ### Frappe Development Environment
-The project provides a streamlined development setup using VSCode Dev Containers:
+The project provides a streamlined development setup using VSCode Dev Containers with automated bench setup:
 
 ```bash
 # Initialize development environment
@@ -119,16 +119,18 @@ cd deploy/
 # Open in VSCode
 code ../development/my-project/frappe_docker/
 
-# In VSCode: Reopen in Container
-# Then follow setup instructions in container
+# In VSCode: Reopen in Container, then run automated setup
+cd development && ./setup-bench.sh
 ```
 
 **Key Features:**
 - **VSCode-first approach**: Prepares environment, guides to proper VSCode workflow
+- **Automated setup**: Custom `setup-bench.sh` script for one-command bench initialization
+- **Configuration-aware**: Setup script customized based on your choices (ERPNext, MMP Core, site name)
 - **Separate from build**: Development and build processes cleanly separated
 - **Git-centric**: Custom apps pushed to GitHub, then included in builds
 - **Environment isolation**: Dev environments in `../development/` to keep repo clean
-- **Complete setup instructions**: Generated per environment with step-by-step guides
+- **Flexible**: Automated script for speed, manual instructions for learning
 
 ### Docker Image Building
 - **Smart defaults**: Frappe + ERPNext by default (no MMP Core unless requested)
@@ -195,12 +197,15 @@ cd deploy/
 
 # 2. Develop in VSCode
 code ../development/my-project/frappe_docker/
-# (Reopen in Container, create custom apps, push to GitHub)
+# Reopen in Container, then: cd development && ./setup-bench.sh
 
-# 3. Build production image
+# 3. Create custom apps, push to GitHub
+# (bench new-app my-app, develop features, git push)
+
+# 4. Build production image
 ./build_mmp_stack.sh build --app github.com/user/my-app:main --push
 
-# 4. Deploy and test
+# 5. Deploy and test
 ./deploy_mmp_local.sh deploy --ssl
 ```
 
