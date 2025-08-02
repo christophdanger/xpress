@@ -81,7 +81,9 @@ cd deploy/
 ./dev_mmp_stack.sh init my-project --with-mmp
 code ../development/my-project/frappe_docker/
 
-# In VSCode: "Dev Containers: Reopen in Container", then run:
+# In VSCode: "Dev Containers: Reopen in Container" 
+# (Explorer will be empty initially - this is normal!)
+# Then run in terminal:
 cd development && ./setup-bench.sh
 ```
 

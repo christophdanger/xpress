@@ -252,6 +252,7 @@ create_setup_instructions() {
    - Press \`Ctrl+Shift+P\` (Cmd+Shift+P on macOS)
    - Type: "Dev Containers: Reopen in Container"
    - Wait for container to build (first time takes 5-10 minutes)
+   - **Note**: VSCode Explorer will be empty initially - this is normal!
 
 3. **Automated Setup** (inside container terminal):
    \`\`\`bash

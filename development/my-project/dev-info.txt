@@ -1,0 +1,21 @@
+# Development Environment: my-project
+# Generated: Sun 20 Jul 2025 08:43:01 PM EDT
+
+=== QUICK ACCESS ===
+1. Open VSCode: code ../development/my-project/frappe_docker/
+2. Reopen in container: Ctrl+Shift+P -> "Dev Containers: Reopen in Container"
+3. Read setup guide: cat ../development/my-project/SETUP-INSTRUCTIONS.md
+
+=== CONFIGURATION ===
+Environment Path: ../development/my-project/frappe_docker/
+Site Name: development.localhost
+Frappe Version: version-15
+Include ERPNext: true
+Include MMP Core: true
+
+=== PRODUCTION WORKFLOW ===
+1. Develop apps in VSCode dev container
+2. Push custom apps to GitHub
+3. Build: ./build_mmp_stack.sh build --app github.com/user/app:main
+4. Deploy: ./deploy_mmp_local.sh deploy --ssl
+
