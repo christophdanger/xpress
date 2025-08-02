@@ -149,8 +149,14 @@ setup_devcontainer() {
     
     # Copy devcontainer example
     if [[ ! -d "$frappe_docker_path/.devcontainer" ]]; then
-        cp -r "$frappe_docker_path/devcontainer-example" "$frappe_docker_path/.devcontainer"
-        log "Devcontainer configuration copied"
+        if [[ -d "$frappe_docker_path/devcontainer-example" ]]; then
+            cp -r "$frappe_docker_path/devcontainer-example" "$frappe_docker_path/.devcontainer"
+            log "Devcontainer configuration copied"
+        else
+            error "devcontainer-example directory not found in $frappe_docker_path"
+        fi
+    else
+        log "Devcontainer configuration already exists"
     fi
     
     # Create development directory (required for VSCode working directory)
@@ -158,8 +164,14 @@ setup_devcontainer() {
     
     # Copy VSCode configuration
     if [[ ! -d "$frappe_docker_path/development/.vscode" ]]; then
-        cp -r "$frappe_docker_path/development/vscode-example" "$frappe_docker_path/development/.vscode"
-        log "VSCode configuration copied"
+        if [[ -d "$frappe_docker_path/development/vscode-example" ]]; then
+            cp -r "$frappe_docker_path/development/vscode-example" "$frappe_docker_path/development/.vscode"
+            log "VSCode configuration copied"
+        else
+            warn "vscode-example directory not found, skipping VSCode config setup"
+        fi
+    else
+        log "VSCode configuration already exists"
     fi
     
     log "Development directory created for VSCode"
